@@ -1,0 +1,344 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024-2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import logging
+import os
+import re
+
+import aiohttp
+from bs4 import BeautifulSoup
+
+from vuln_analysis.data_models.cve_intel import CveIntelNvd
+from vuln_analysis.utils.async_http_utils import request_with_retry
+from vuln_analysis.utils.clients.intel_client import IntelClient
+from vuln_analysis.utils.intel_utils import parse
+from vuln_analysis.utils.intel_utils import parse_config_vendors
+from vuln_analysis.utils.url_utils import url_join
+
+logger = logging.getLogger(__name__)
+
+
+class NVDClient(IntelClient):
+    """
+    Async client for NIST's NVD API
+
+    While not strictly required, obtaining an API key is recommended, to obtain one refer:
+    https://nvd.nist.gov/developers/start-here
+    """
+
+    CWE_NAME_RE = re.compile(r'^.*?-\s*')
+    CWE_DETAILS_URL = "http://cwe.mitre.org"
+
+    def __init__(self,
+                 *,
+                 base_url: str | None = None,
+                 api_key: str | None = None,
+                 lang_code: str = 'en',
+                 session: aiohttp.ClientSession | None = None,
+                 retry_count: int = 10,
+                 sleep_time: float = 0.1,
+                 respect_retry_after_header: bool = True,
+                 retry_on_client_errors: bool = True):
+
+        super().__init__(session=session,
+                         base_url=base_url or os.environ.get('NVD_BASE_URL'),
+                         retry_count=retry_count,
+                         sleep_time=sleep_time,
+                         respect_retry_after_header=respect_retry_after_header,
+                         retry_on_client_errors=retry_on_client_errors,
+                         api_key_env_var='NVD_API_KEY')
+
+        self._api_key = api_key or os.environ.get('NVD_API_KEY', None)
+
+        self._cwe_details_url_template = url_join(os.environ.get('CWE_DETAILS_BASE_URL', self.CWE_DETAILS_URL),
+                                                  "data/definitions",
+                                                  "{CWE_ID}.html")
+
+        self._lang_code = lang_code
+
+        self._headers = {'Content-Type': 'application/json'}
+
+        if self._api_key is not None:
+            self._headers['apiKey'] = self._api_key
+
+    @classmethod
+    def default_base_url(cls) -> str:
+        return "https://services.nvd.nist.gov/rest"
+
+    async def _get_soup(self, url: str) -> BeautifulSoup:
+
+        async with request_with_retry(session=self._session,
+                                      request_kwargs={
+                                          'method': 'GET',
+                                          'url': url,
+                                          "skip_auto_headers": {"User-Agent"},
+                                      },
+                                      max_retries=self._retry_count,
+                                      retry_on_client_errors=self._retry_on_client_errors,
+                                      api_key_env_var=self._api_key_env_var) as response:
+            return BeautifulSoup(await response.text(), 'html.parser')
+
+    def _get_cvss_vector_from_metric(self, metrics: dict, metric_version: str) -> str | None:
+        versioned_metrics = metrics[metric_version]
+        for metric_type in ('primary', 'secondary'):
+            for metric in versioned_metrics:
+                if metric['type'].lower() == metric_type:
+                    return metric['cvssData']['vectorString']
+
+    def _get_cvss_base_score_from_metric(self, metrics: dict, metric_version: str) -> float | None:
+        versioned_metrics = metrics[metric_version]
+        for metric_type in ('primary', 'secondary'):
+            for metric in versioned_metrics:
+                if metric['type'].lower() == metric_type:
+                    return metric['cvssData']['baseScore']
+
+    def _get_cvss_base_severity_from_metric(self, metrics: dict, metric_version: str) -> str | None:
+        versioned_metrics = metrics[metric_version]
+        for metric_type in ('primary', 'secondary'):
+            for metric in versioned_metrics:
+                if metric['type'].lower() == metric_type:
+                    return metric['cvssData']['baseSeverity']
+
+    def _get_cwe(self, cwes: list[dict]) -> str | None:
+        for cwe_type in ('primary', 'secondary'):
+            for cwe in cwes:
+                if cwe['type'].lower() == cwe_type:
+                    cwe_descriptions = cwe['description']
+                    for cwe_description in cwe_descriptions:
+                        if cwe_description['lang'] == self._lang_code:
+                            return cwe_description['value']
+
+    async def _get_cwe_elements(self, cve_obj: dict) -> dict:
+        """
+        Asynchronously extract CWE (Common Weakness Enumeration) elements from the CVE object, and retreive details for
+        those CWEs.
+        """
+        # Get CWE name
+        cwe_id = None
+        weaknesses = cve_obj.get('weaknesses', [])
+        cwe_id = self._get_cwe(weaknesses)
+        cwe_link = None
+        cwe_name = None
+        cwe_description = None
+        cwe_extended_description = None
+        if cwe_id is not None:
+            if cwe_id.startswith('CWE-'):
+                cwe_id = cwe_id.replace('CWE-', '', 1)
+
+            if cwe_id.isnumeric():
+                cwe_link = self._cwe_details_url_template.format(CWE_ID=cwe_id)
+
+        if cwe_link is not None:
+            soup = await self._get_soup(cwe_link)
+
+            if soup is not None:
+                title_tag = soup.find('title')
+                if title_tag:
+                    cwe_name = title_tag.string.strip()
+                    cwe_name = self.CWE_NAME_RE.sub('', cwe_name).strip()
+                    description_div = soup.find('div', id='Description')
+                    if description_div:
+                        cwe_description = description_div.find('div', class_='indent').text.strip()
+
+                    extended_description_div = soup.find('div', id='Extended_Description')
+                    if extended_description_div:
+                        cwe_extended_description = extended_description_div.find('div', class_='indent').text.strip()
+
+        return {
+            "cwe_name": cwe_name,
+            "cwe_description": cwe_description,
+            "cwe_extended_description": cwe_extended_description,
+        }
+
+    def _parse_nvd_cvss_vector(self, cve_obj: dict) -> str | None:
+        """
+        Extract the CVSS vector from a CVE json object.
+
+        Parameters
+        ----------
+        cve_obj : dict
+            The cve sub-dictionary of the JSON document.
+
+        Returns
+        -------
+        str or None
+            The CVSS vector string, if found. Otherwise, None.
+        """
+        # metrics is optional https://nvd.nist.gov/developers/vulnerabilities
+        metrics = cve_obj.get('metrics')
+        if metrics is not None:
+            # Attempt to find the CVSS vector in order of preference
+            for metric_version in ('cvssMetricV31', 'cvssMetricV30'):
+                try:
+                    cvss_vector = self._get_cvss_vector_from_metric(metrics, metric_version)
+                    if cvss_vector is not None:
+                        return cvss_vector
+                except KeyError:
+                    continue
+
+    def _parse_nvd_cvss_base_score(self, cve_obj: dict) -> float | None:
+        """
+        Extract the CVSS baseScore from a CVE json object.
+
+        Parameters
+        ----------
+        cve_obj : dict
+            The cve sub-dictionary of the JSON document.
+
+        Returns
+        -------
+        float or None
+            The CVSS baseScore, if found. Otherwise, None.
+        """
+        # metrics is optional https://nvd.nist.gov/developers/vulnerabilities
+        metrics = cve_obj.get('metrics')
+        if metrics is not None:
+            # Attempt to find the CVSS vector in order of preference
+            for metric_version in ('cvssMetricV31', 'cvssMetricV30'):
+                try:
+                    cvss_base_score = self._get_cvss_base_score_from_metric(metrics, metric_version)
+                    if cvss_base_score is not None:
+                        return cvss_base_score
+                except KeyError:
+                    continue
+
+    def _parse_nvd_cvss_base_severity(self, cve_obj: dict) -> str | None:
+        """
+        Extract the CVSS vector from a CVE json object.
+
+        Parameters
+        ----------
+        cve_obj : dict
+            The cve sub-dictionary of the JSON document.
+
+        Returns
+        -------
+        str or None
+            The CVSS base severity string, if found. Otherwise, None.
+        """
+        # metrics is optional https://nvd.nist.gov/developers/vulnerabilities
+        metrics = cve_obj.get('metrics')
+        if metrics is not None:
+            # Attempt to find the CVSS vector in order of preference
+            for metric_version in ('cvssMetricV31', 'cvssMetricV30'):
+                try:
+                    cvss_vector = self._get_cvss_base_severity_from_metric(metrics, metric_version)
+                    if cvss_vector is not None:
+                        return cvss_vector
+                except KeyError:
+                    continue
+
+    def _parse_references(self, cve_obj: dict) -> list[str]:
+        """
+        Extract cve reference links from the CVE json object
+
+        Parameters
+        ----------
+        cve_obj : dict
+            The cve sub-dictionary of the JSON document.
+
+        Returns
+        -------
+        list[str]
+            The CVE references as a list
+        """
+        # references is required https://nvd.nist.gov/developers/vulnerabilities
+        references = cve_obj.get('references')
+        return [reference["url"] for reference in references]
+
+    def _parse_disputed_status(self, cve_obj: dict) -> bool:
+        """
+        Return disputed status of the cve
+
+        Parameters
+        ----------
+        cve_obj : dict
+            The cve sub-dictionary of the JSON document.
+
+        Returns
+        -------
+        bool
+            returns true if 'disputed' tag exists
+        """
+        # cveTags is optional https://nvd.nist.gov/developers/vulnerabilities
+        cve_tags = cve_obj.get('cveTags')
+        if cve_tags:
+            for tag_entry in cve_tags:
+                tags = tag_entry.get("tags", [])
+                return "disputed" in tags
+        return False
+
+    async def get_intel_dict(self, cve_id: str) -> dict:
+
+        response = await self.request(method="GET",
+                                      url=url_join(self.base_url, 'json/cves/2.0'),
+                                      params={'cveId': cve_id},
+                                      headers=self._headers)
+
+        # Get the vulnerabilities from the dict
+        vulns = response.get("vulnerabilities", [])
+
+        if (len(vulns) == 0):
+            raise ValueError(f"Could not find CVE entry for {cve_id}")
+
+        if (len(vulns) > 1):
+            logger.warning(f"Found multiple CVE entries for {cve_id}, using the first one")
+
+        return vulns[0]
+
+    async def get_intel(self, cve_id: str) -> CveIntelNvd:
+        """
+        Get the CVE Intel object for the given CVE ID
+
+        Args:
+            cve_id (str): The CVE ID to get the Intel for
+
+        Returns:
+            CveIntelNvd: The CVE Intel object
+        """
+        intel_dict = await self.get_intel_dict(cve_id)
+
+        cve_vuln: dict = intel_dict.get("cve", {})
+
+        cve_description = "\n".join(
+            desc.get('value', '') for desc in cve_vuln.get('descriptions', []) if desc.get('lang') == self._lang_code)
+
+        cve_configurations = parse(cve_vuln.get('configurations', []))
+        cvss_vector = self._parse_nvd_cvss_vector(cve_vuln)
+        cvss_base_score = self._parse_nvd_cvss_base_score(cve_vuln)
+        cvss_severity = self._parse_nvd_cvss_base_severity(cve_vuln)
+        cwe_elements = await self._get_cwe_elements(cve_vuln)
+        vendor_names = parse_config_vendors(cve_vuln.get('configurations', []))
+        references = self._parse_references(cve_vuln)
+        disputed = self._parse_disputed_status(cve_vuln)
+        published_at = cve_vuln.get('published')  # required field
+        updated_at = cve_vuln.get('lastModified')  # required field
+
+        intel = CveIntelNvd(cve_id=cve_id,
+                            cve_description=cve_description,
+                            cvss_vector=cvss_vector,
+                            cvss_base_score=cvss_base_score,
+                            cvss_severity=cvss_severity,
+                            cwe_name=cwe_elements["cwe_name"],
+                            cwe_description=cwe_elements["cwe_description"],
+                            cwe_extended_description=cwe_elements["cwe_extended_description"],
+                            configurations=cve_configurations,
+                            vendor_names=vendor_names,
+                            references=references,
+                            disputed=disputed,
+                            published_at=published_at,
+                            updated_at=updated_at)
+
+        return intel

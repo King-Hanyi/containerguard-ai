@@ -1,0 +1,98 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import asyncio
+import logging
+
+from nat.builder.builder import Builder
+from nat.builder.framework_enum import LLMFrameworkEnum
+from nat.builder.function_info import FunctionInfo
+from nat.cli.register_workflow import register_function
+from nat.data_models.function import FunctionBaseConfig
+from pydantic import Field
+
+from vuln_analysis.utils.concurrency import get_effective_rate_limiter
+
+logger = logging.getLogger(__name__)
+
+
+class CVEJustifyToolConfig(FunctionBaseConfig, name="cve_justify"):
+    """
+    Defines a function that assigns justification label and reason to each CVE based on summary.
+    """
+    llm_name: str = Field(description="The LLM model to use")
+    llm_max_rate: int | None = Field(
+        default=None,
+        description="Maximum LLM rate limit (requests per second) for justification tasks. "
+        "If set to a number, overrides the workflow-level llm_max_rate. If None, inherits from workflow-level setting.")
+
+
+@register_function(config_type=CVEJustifyToolConfig, framework_wrappers=[LLMFrameworkEnum.LANGCHAIN])
+async def cve_justify(config: CVEJustifyToolConfig, builder: Builder):
+
+    from langchain_core.prompts import PromptTemplate
+
+    from vuln_analysis.data_models.state import AgentMorpheusEngineState
+    from vuln_analysis.utils.justification_parser import JustificationParser
+
+    jp = JustificationParser()
+
+    llm = await builder.get_llm(llm_name=config.llm_name, wrapper_type=LLMFrameworkEnum.LANGCHAIN)
+
+    prompt = PromptTemplate(input_variables=["summary"], template=jp.JUSTIFICATION_PROMPT)
+    chain = prompt | llm
+
+    async def justify_cve(summary):
+        try:
+            justification_text = await chain.ainvoke({"summary": summary})
+            return justification_text.content
+        except Exception as e:
+            logger.error("Error in generating justification: %s: %s", type(e).__name__, e)
+            raise
+
+    async def _arun(state: AgentMorpheusEngineState) -> AgentMorpheusEngineState:
+        rate_limiter = get_effective_rate_limiter(config.llm_max_rate, builder)
+
+        if rate_limiter is not None:
+            # Use rate limiter to control the rate of requests to the LLM API
+            async def justify_with_rate_limit(summary):
+                async with rate_limiter:
+                    return await justify_cve(summary)
+
+            effective_rate = int(rate_limiter.max_rate / rate_limiter.time_period)
+            logger.info("Justifying %d CVEs with LLM rate limit of %d requests/second",
+                        len(state.final_summaries),
+                        effective_rate)
+            results = await asyncio.gather(*(justify_with_rate_limit(summary)
+                                             for summary in state.final_summaries.values()))
+        else:
+            logger.info("Justifying %d CVEs with no rate limiting", len(state.final_summaries))
+            results = await asyncio.gather(*(justify_cve(summary) for summary in state.final_summaries.values()))
+
+        parsed_justification = await asyncio.gather(jp._parse_justification(results))
+
+        # format justification output
+        justifications = {}
+        for i, vuln_id in enumerate(state.checklist_results.keys()):
+            justifications[vuln_id] = {}
+            for key in parsed_justification[0]:
+                justifications[vuln_id][key] = parsed_justification[0][key][i]
+
+        state.justifications = justifications
+        return state
+
+    yield FunctionInfo.from_fn(_arun,
+                               input_schema=AgentMorpheusEngineState,
+                               description=("Assigns justification label and reason to each CVE based on summary."))

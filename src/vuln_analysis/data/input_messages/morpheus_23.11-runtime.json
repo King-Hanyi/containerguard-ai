@@ -1,0 +1,41 @@
+{
+  "image": {
+    "name": "nvcr.io/nvidia/morpheus/morpheus",
+    "tag": "23.11-runtime",
+    "source_info": [
+      {
+        "type": "code",
+        "git_repo": "https://github.com/nv-morpheus/Morpheus.git",
+        "ref": "v23.11.01",
+        "include": [
+          "**/*.py",
+          "**/*.cpp",
+          "**/*.h"
+        ],
+        "exclude": [
+          "tests/**/*"
+        ]
+      },
+      {
+        "type": "doc",
+        "git_repo": "https://github.com/nv-morpheus/Morpheus.git",
+        "ref": "v23.11.01",
+        "include": [
+          "**/*.md",
+          "docs/**/*.rst"
+        ]
+      }
+    ],
+    "sbom_info": {
+      "_type": "file",
+      "file_path": "src/vuln_analysis/data/sboms/nvcr.io/nvidia/morpheus/morpheus_v23.11.01-runtime.sbom"
+    }
+  },
+  "scan": {
+    "vulns": [
+      {
+        "vuln_id": "CVE-2023-36632"
+      }
+    ]
+  }
+}

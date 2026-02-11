@@ -1,0 +1,106 @@
+# ContainerGuard AI - 本地测试配置 (无 SerpAPI)
+# 基于 config.yml, 移除 Internet Search 工具以避免 SERPAPI_API_KEY 依赖
+
+general:
+  use_uvloop: false  # Windows 不支持 uvloop
+
+functions:
+  cve_generate_vdbs:
+    _type: cve_generate_vdbs
+    agent_name: cve_agent_executor
+    embedder_name: nim_embedder
+    base_git_dir: .cache/am_cache/git
+    base_vdb_dir: .cache/am_cache/vdb
+    base_code_index_dir: .cache/am_cache/code_index
+  cve_fetch_intel:
+    _type: cve_fetch_intel
+    retry_on_client_errors: true
+    max_retries: 5
+    request_timeout: 30
+    intel_source_timeout: null
+  cve_process_sbom:
+    _type: cve_process_sbom
+  cve_check_vuln_deps:
+    _type: cve_check_vuln_deps
+    skip: false
+  cve_checklist:
+    _type: cve_checklist
+    llm_name: default_llm
+  Container Image Code QA System:
+    _type: local_vdb_retriever
+    embedder_name: nim_embedder
+    llm_name: default_llm
+    vdb_type: code
+    return_source_documents: false
+  Container Image Developer Guide QA System:
+    _type: local_vdb_retriever
+    embedder_name: nim_embedder
+    llm_name: default_llm
+    vdb_type: doc
+    return_source_documents: false
+  Lexical Search Container Image Code QA System:
+    _type: lexical_code_search
+    top_k: 5
+  # Internet Search 已禁用 (无 SERPAPI_API_KEY)
+  cve_agent_executor:
+    _type: cve_agent_executor
+    llm_name: default_llm
+    tool_names:
+      - Container Image Code QA System
+      - Container Image Developer Guide QA System
+    max_iterations: 10
+    prompt_examples: false
+    replace_exceptions: true
+    replace_exceptions_value: "I do not have a definitive answer for this checklist item."
+    return_intermediate_steps: false
+    verbose: false
+  cve_summarize:
+    _type: cve_summarize
+    llm_name: default_llm
+  cve_justify:
+    _type: cve_justify
+    llm_name: default_llm
+  cve_file_output:
+    _type: cve_file_output
+    file_path: .tmp/output.json
+    markdown_dir: .tmp/vulnerability_markdown_reports
+    overwrite: true
+
+llms:
+  default_llm:
+    _type: nim
+    base_url: ${NVIDIA_API_BASE:-https://integrate.api.nvidia.com/v1}
+    model_name: ${DEFAULT_MODEL_NAME:-meta/llama-3.1-70b-instruct}
+    temperature: 0.0
+    max_tokens: 2000
+    top_p: 0.01
+    do_auto_retry: True
+    num_retries: 5
+    retry_on_status_codes: [429, 500, 502, 503, 504]
+    retry_on_errors: ["Too Many Requests", "Internal Server Error", "Bad Gateway", "Service Unavailable", "Gateway Time-out", "Gateway Timeout"]
+
+embedders:
+  nim_embedder:
+    _type: nim
+    base_url: ${NIM_EMBED_BASE_URL:-https://integrate.api.nvidia.com/v1}
+    model_name: ${EMBEDDER_MODEL_NAME:-nvidia/nv-embedqa-e5-v5}
+    truncate: END
+    max_batch_size: 128
+    do_auto_retry: True
+    num_retries: 5
+    retry_on_status_codes: [429, 500, 502, 503, 504]
+    retry_on_errors: ["Too Many Requests", "Internal Server Error", "Bad Gateway", "Service Unavailable", "Gateway Time-out", "Gateway Timeout"]
+
+workflow:
+  _type: cve_agent
+  cve_generate_vdbs_name: cve_generate_vdbs
+  cve_fetch_intel_name: cve_fetch_intel
+  cve_process_sbom_name: cve_process_sbom
+  cve_check_vuln_deps_name: cve_check_vuln_deps
+  cve_checklist_name: cve_checklist
+  cve_agent_executor_name: cve_agent_executor
+  cve_summarize_name: cve_summarize
+  cve_justify_name: cve_justify
+  cve_output_config_name: cve_file_output
+  missing_source_action: continue_with_warning
+  llm_max_rate: 1
