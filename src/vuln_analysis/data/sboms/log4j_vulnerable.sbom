@@ -1,0 +1,4 @@
+NAME VERSION TYPE
+log4j-core 2.14.1 java-archive
+spring-webmvc 5.3.14 java-archive
+tomcat-embed-core 9.0.56 java-archive

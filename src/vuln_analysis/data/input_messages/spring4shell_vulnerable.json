@@ -1,0 +1,32 @@
+{
+    "image": {
+        "name": "spring4shell-vulnerable-app",
+        "tag": "latest",
+        "source_info": [
+            {
+                "type": "code",
+                "git_repo": "https://github.com/reznok/Spring4Shell-POC.git",
+                "ref": "main",
+                "include": [
+                    "**/*.java",
+                    "**/*.xml",
+                    "**/*.properties"
+                ],
+                "exclude": [
+                    "tests/**/*"
+                ]
+            }
+        ],
+        "sbom_info": {
+            "_type": "file",
+            "file_path": "src/vuln_analysis/data/sboms/spring4shell_vulnerable.sbom"
+        }
+    },
+    "scan": {
+        "vulns": [
+            {
+                "vuln_id": "CVE-2022-22965"
+            }
+        ]
+    }
+}

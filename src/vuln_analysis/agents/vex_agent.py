@@ -6,12 +6,35 @@ VEX Agent — 漏洞判定智能体。
 
 职责: 综合 Intel / Code / Config 三个 Agent 的分析结果，
       生成最终的 VEX 判定 (affected / not_affected / unknown)。
+
+Prompt 配置从 configs/prompts.yml 加载（支持 Few-shot 示例）。
 """
 
 import logging
+from pathlib import Path
+
+import yaml
+
 from vuln_analysis.agents.state import VEXJudgment, MultiAgentState
 
 logger = logging.getLogger(__name__)
+
+# 加载 Prompt 配置
+_CONFIGS_DIR = Path(__file__).resolve().parent.parent / "configs"
+_PROMPT_CONFIG = {}
+try:
+    _prompt_path = _CONFIGS_DIR / "prompts.yml"
+    if _prompt_path.exists():
+        with open(_prompt_path, "r", encoding="utf-8") as f:
+            _PROMPT_CONFIG = yaml.safe_load(f) or {}
+        logger.debug("已加载 Prompt 配置: %s", _prompt_path)
+except Exception as e:
+    logger.warning("加载 prompts.yml 失败: %s (使用默认 Prompt)", e)
+
+
+def get_vex_prompt_config() -> dict:
+    """获取 VEX Agent 的 Prompt 配置（含 Few-shot 示例）。"""
+    return _PROMPT_CONFIG.get("vex_agent", {})
 
 
 def _judge_vex_status(
@@ -25,20 +48,18 @@ def _judge_vex_status(
     """
     基于多维证据进行 VEX 判定。
     
-    判定逻辑:
-    - affected: 包存在 + 代码可达 + 有情报
-    - not_affected: 包不存在 OR 代码不可达
-    - unknown: 证据不足
+    使用标准 VEX justification 标签:
+    - component_not_present: 容器中不包含漏洞组件
+    - vulnerable_code_not_present: 漏洞代码不在容器中
+    - vulnerable_code_not_in_execute_path: 漏洞代码存在但不在执行路径上
     
     Returns: (status, justification, confidence)
     """
-    reasons = []
-    
     if not has_intel:
         return "unknown", "情报数据不足，无法判定", 0.2
 
     if not package_found:
-        return "not_affected", "vulnerable_code_not_present: SBOM 中未发现受影响的软件包", 0.85
+        return "not_affected", "component_not_present: SBOM 中未发现受影响的软件包", 0.85
 
     if package_found and not code_found:
         return "not_affected", "vulnerable_code_not_in_execute_path: 漏洞包存在但未发现漏洞函数调用", 0.7

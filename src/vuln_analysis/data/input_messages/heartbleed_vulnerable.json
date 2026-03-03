@@ -1,0 +1,31 @@
+{
+    "image": {
+        "name": "heartbleed-vulnerable-app",
+        "tag": "latest",
+        "source_info": [
+            {
+                "type": "code",
+                "git_repo": "https://github.com/openssl/openssl.git",
+                "ref": "OpenSSL_1_0_1",
+                "include": [
+                    "**/*.c",
+                    "**/*.h"
+                ],
+                "exclude": [
+                    "tests/**/*"
+                ]
+            }
+        ],
+        "sbom_info": {
+            "_type": "file",
+            "file_path": "src/vuln_analysis/data/sboms/heartbleed_vulnerable.sbom"
+        }
+    },
+    "scan": {
+        "vulns": [
+            {
+                "vuln_id": "CVE-2014-0160"
+            }
+        ]
+    }
+}

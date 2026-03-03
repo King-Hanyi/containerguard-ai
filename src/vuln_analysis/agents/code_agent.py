@@ -15,10 +15,22 @@ logger = logging.getLogger(__name__)
 
 # CVE → 漏洞函数/关键词映射表（可扩展）
 CVE_SEARCH_PATTERNS = {
+    # Python 系列
     "CVE-2023-36632": ["email.utils.parseaddr", "parseaddr"],
-    "CVE-2021-44228": ["org.apache.logging.log4j", "JndiLookup"],
-    "CVE-2022-22965": ["spring-webmvc", "ClassPathResource"],
-    "CVE-2014-0160": ["SSL_read", "dtls1_process_heartbeat"],
+    "CVE-2023-24329": ["urllib.parse", "urlparse"],
+    "CVE-2022-45061": ["idna", "decode"],
+    # Java 系列
+    "CVE-2021-44228": ["org.apache.logging.log4j", "JndiLookup", "log4j-core"],
+    "CVE-2021-45046": ["org.apache.logging.log4j", "JndiLookup"],
+    "CVE-2022-22965": ["spring-webmvc", "ClassPathResource", "spring-beans"],
+    "CVE-2022-22947": ["spring-cloud-gateway", "RouteDefinitionLocator"],
+    # C/C++ 系列
+    "CVE-2014-0160": ["SSL_read", "dtls1_process_heartbeat", "tls1_process_heartbeat"],
+    "CVE-2021-3449": ["ssl3_read_bytes", "SSL_do_handshake"],
+    "CVE-2024-3094": ["xz", "liblzma"],
+    # JavaScript / Node.js
+    "CVE-2021-44906": ["minimist", "prototype pollution"],
+    "CVE-2022-0235": ["node-fetch", "authorization header"],
 }
 
 
@@ -28,13 +40,16 @@ def _get_search_queries(cve_id: str, intel_description: str = "") -> list[str]:
     if cve_id in CVE_SEARCH_PATTERNS:
         return CVE_SEARCH_PATTERNS[cve_id]
     
-    # 从情报描述中提取关键函数名（简单启发式）
+    # 从情报描述中提取关键函数名（改进的启发式）
     queries = []
     if intel_description:
-        # 提取可能的函数名或包名
         for word in intel_description.split():
-            if '.' in word and len(word) > 5 and word[0].islower():
-                queries.append(word.strip('.,;:()'))
+            cleaned = word.strip('.,;:()"\'')
+            # 匹配 Java/Python 包名 (含 .) 或 C 函数名 (含 _)
+            if '.' in cleaned and len(cleaned) > 5 and cleaned[0].islower():
+                queries.append(cleaned)
+            elif '_' in cleaned and len(cleaned) > 5 and cleaned[0].islower():
+                queries.append(cleaned)
     
     return queries if queries else [cve_id]
 

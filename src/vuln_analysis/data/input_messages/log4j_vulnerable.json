@@ -1,0 +1,31 @@
+{
+    "image": {
+        "name": "log4j-vulnerable-app",
+        "tag": "latest",
+        "source_info": [
+            {
+                "type": "code",
+                "git_repo": "https://github.com/christophetd/log4shell-vulnerable-app.git",
+                "ref": "main",
+                "include": [
+                    "**/*.java",
+                    "**/*.xml"
+                ],
+                "exclude": [
+                    "tests/**/*"
+                ]
+            }
+        ],
+        "sbom_info": {
+            "_type": "file",
+            "file_path": "src/vuln_analysis/data/sboms/log4j_vulnerable.sbom"
+        }
+    },
+    "scan": {
+        "vulns": [
+            {
+                "vuln_id": "CVE-2021-44228"
+            }
+        ]
+    }
+}

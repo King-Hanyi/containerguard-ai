@@ -1,0 +1,4 @@
+NAME VERSION TYPE
+spring-beans 5.3.17 java-archive
+spring-webmvc 5.3.17 java-archive
+tomcat-embed-core 9.0.60 java-archive

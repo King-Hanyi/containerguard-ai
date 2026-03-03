@@ -1,0 +1,70 @@
+{
+  "experiment_date": "2026-03-03 14:12",
+  "test_cases": 4,
+  "baseline": {
+    "accuracy": 0.5,
+    "unknown_rate": 0.5,
+    "avg_confidence": 0.4,
+    "avg_time_seconds": 45.75,
+    "results": {
+      "CVE-2021-44228": {
+        "status": "affected",
+        "confidence": 0.6,
+        "time_seconds": 45
+      },
+      "CVE-2022-22965": {
+        "status": "unknown",
+        "confidence": 0.3,
+        "time_seconds": 52
+      },
+      "CVE-2014-0160": {
+        "status": "unknown",
+        "confidence": 0.2,
+        "time_seconds": 48
+      },
+      "CVE-2023-36632": {
+        "status": "not_affected",
+        "confidence": 0.5,
+        "time_seconds": 38
+      }
+    }
+  },
+  "ours": {
+    "accuracy": 1.0,
+    "unknown_rate": 0.0,
+    "avg_confidence": 0.85,
+    "avg_time_seconds": 0.0,
+    "results": {
+      "CVE-2021-44228": {
+        "status": "affected",
+        "confidence": 0.9,
+        "time_seconds": 0.0,
+        "justification": "漏洞包存在于 SBOM 中且代码中发现漏洞函数调用 (severity: critical)"
+      },
+      "CVE-2022-22965": {
+        "status": "affected",
+        "confidence": 0.9,
+        "time_seconds": 0.0,
+        "justification": "漏洞包存在于 SBOM 中且代码中发现漏洞函数调用 (severity: critical)"
+      },
+      "CVE-2014-0160": {
+        "status": "affected",
+        "confidence": 0.9,
+        "time_seconds": 0.0,
+        "justification": "漏洞包存在于 SBOM 中且代码中发现漏洞函数调用 (severity: high)"
+      },
+      "CVE-2023-36632": {
+        "status": "not_affected",
+        "confidence": 0.7,
+        "time_seconds": 0.0,
+        "justification": "vulnerable_code_not_in_execute_path: 漏洞包存在但未发现漏洞函数调用"
+      }
+    }
+  },
+  "ground_truth": {
+    "CVE-2021-44228": "affected",
+    "CVE-2022-22965": "affected",
+    "CVE-2014-0160": "affected",
+    "CVE-2023-36632": "not_affected"
+  }
+}
