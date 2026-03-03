@@ -4,6 +4,8 @@
 
 > **注**: 本项目基于 [NVIDIA AI Blueprint for Vulnerability Analysis](https://github.com/NVIDIA-AI-Blueprints/vulnerability-analysis) 二次开发，扩展了自定义的多智能体协同架构与 Skills 插件化系统。
 
+[![CI](https://github.com/King-Hanyi/containerguard-ai/actions/workflows/containerguard.yml/badge.svg)](https://github.com/King-Hanyi/containerguard-ai/actions)
+
 ## 👥 核心团队
 
 -   **组长**: 金韩溢
@@ -11,36 +13,82 @@
 
 ## 🚀 项目概述
 
-**ContainerGuard AI** 旨在通过引入模块化的**多智能体 (Multi-Agent)** 架构，彻底革新容器安全分析的流程。
+**ContainerGuard AI** 通过引入模块化的 **多智能体 (Multi-Agent)** 架构，革新容器安全分析流程。
 
-传统的漏洞扫描工具往往只提供静态的漏洞列表，缺乏对上下文的深入理解。ContainerGuard AI 利用大语言模型 (LLM) 的推理能力，结合专门设计的 Agent（如代码分析员、配置审核员、情报分析员），对容器环境及代码进行深度上下文感知的风险评估与验证。
+传统漏洞扫描工具只提供静态的漏洞列表，缺乏对上下文的深入理解。ContainerGuard AI 利用大语言模型 (LLM) 的推理能力，结合 Supervisor 调度的 4 个专业 Agent（情报分析员、代码审计员、配置审计员、VEX 裁判），对容器进行深度上下文感知的风险评估。
+
+### 与 NVIDIA Blueprint 对比
+
+| 维度 | NVIDIA Blueprint (原始) | ContainerGuard AI (我们) |
+|:---|:---|:---|
+| **架构** | 单 Agent 线性流水线 | Supervisor + 4 子 Agent 并行 |
+| **代码分析** | 本地 Git Clone + FAISS VDB | GitHub API 远程搜索 |
+| **功能扩展** | 硬编码函数 | 插件化 Skill + 装饰器注册 |
+| **执行方式** | 所有步骤串行 | 信息收集阶段三路并行 |
+| **LLM 策略** | 统一用一个模型 | 异构 LLM (70B + 8B) |
+| **Windows** | 路径长度崩溃 | 完全兼容 |
+
+### Baseline 实验结果
+
+| 指标 | Baseline (单 Agent) | Ours (多 Agent) |
+|:---|:---|:---|
+| **准确率** | 50% (2/4) | **100% (4/4)** |
+| **Unknown 率** | 50% | **0%** |
+| **平均置信度** | 40% | **85%** |
 
 ## ✨ 核心特性
 
--   **Skills 插件化框架**: 基于 `BaseSkill` 抽象基类 + `SkillRegistry` 注册机制，实现分析能力的热插拔扩展。
--   **远程代码检索**: 通过 GitHub API 远程搜索代码（`RemoteCodeSkill`），替代传统的本地 Git Clone + VDB 方案。
--   **多源情报融合**: 集成 NVD / GHSA / RedHat / Ubuntu 等多个漏洞情报源（`IntelSkill`）。
--   **容器配置审计**: 支持 File / HTTP / Manual 三种模式解析 SBOM（`ConfigSkill`）。
--   **多智能体协同** (规划中): Supervisor 调度 + 专业 Agent 并行工作 + 异构 LLM 策略。
--   **策略即代码** (规划中): 集成 OPA (Open Policy Agent)，实现自动化安全门禁。
+-   **多智能体协同**: Supervisor Agent 调度 Intel / Code / Config / VEX 四个子 Agent 并行工作
+-   **Skills 插件化框架**: 基于 `BaseSkill` 抽象基类 + `SkillRegistry` 注册机制，实现分析能力的热插拔扩展
+-   **远程代码检索**: 通过 GitHub API 远程搜索代码（`RemoteCodeSkill`），替代本地 Git Clone + VDB 方案
+-   **多源情报融合**: 集成 NVD / GHSA / RedHat / Ubuntu 等多个漏洞情报源（`IntelSkill`）
+-   **容器配置审计**: 支持 File / HTTP / Manual 三种模式解析 SBOM（`ConfigSkill`）
+-   **Prompt 工程优化**: Few-shot 示例 + 标准 VEX justification 标签 + 配置外置
+-   **CI/CD 集成**: GitHub Action 自动化测试与验证
+-   **可视化 Dashboard**: Streamlit 4 页交互式答辩演示界面
+-   **策略即代码** (规划中): 集成 OPA (Open Policy Agent)，实现自动化安全门禁
 
 ## 🏗️ 项目架构
 
 ```
 src/vuln_analysis/
-├── skills/                  # Skills 插件化框架 (自主创新)
+├── agents/                  # 多智能体系统 (阶段二)
+│   ├── state.py             # 共享状态模型 (6 个 Pydantic 模型)
+│   ├── supervisor.py        # Supervisor Agent (LangGraph 状态机)
+│   ├── intel_agent.py       # Intel Agent — 情报分析
+│   ├── code_agent.py        # Code Agent — 代码可达性 (14 CVE 模式)
+│   ├── config_agent.py      # Config Agent — 依赖审计
+│   └── vex_agent.py         # VEX Agent — 综合判定 (标准 VEX 标签)
+├── skills/                  # Skills 插件化框架 (阶段一)
 │   ├── base.py              # BaseSkill 抽象基类
 │   ├── registry.py          # SkillRegistry 注册装饰器
 │   ├── intel.py             # IntelSkill — 多源漏洞情报检索
 │   ├── config.py            # ConfigSkill — SBOM 解析
 │   └── remote_code.py       # RemoteCodeSkill — GitHub API 代码搜索
+├── configs/                 # 配置文件
+│   └── prompts.yml          # Agent Prompt 配置 (Few-shot 示例)
+├── data/                    # 测试数据
+│   ├── input_messages/      # 测试输入 (Log4j / Spring4Shell / Heartbleed / Morpheus)
+│   └── sboms/               # SBOM 文件
 ├── functions/               # NVIDIA Blueprint 原始函数
 ├── tools/                   # Agent 工具集
-├── eval/                    # 评估管线
-└── configs/                 # 配置文件
+└── eval/                    # 评估管线
+
+scripts/
+├── demo_agents.py           # 多 Agent 系统演示脚本
+├── run_baseline.py          # Baseline 对比实验
+└── check_progress.py        # 项目进度自动检查
+
+dashboard/
+└── app.py                   # Streamlit 可视化 Dashboard (4 页)
 
 tests/
-└── test_skills.py           # Skills 框架单元测试 (13 项全通过)
+├── test_skills.py           # Skills 框架测试 (13 项)
+├── test_agents.py           # 多 Agent 系统测试 (20 项)
+└── test_java_script_extended.py
+
+.github/workflows/
+└── containerguard.yml       # CI/CD 自动化测试
 ```
 
 ## 🛠️ 技术栈
@@ -50,25 +98,34 @@ tests/
 -   **向量数据库**: FAISS
 -   **大模型服务**: NVIDIA NIM
 -   **包管理**: uv
+-   **可视化**: Streamlit + Plotly
+-   **CI/CD**: GitHub Actions
 
 ## 📅 开发进度
 
-### 阶段一: 基础框架与技能构建 (2.9 - 2.22)
--   [x] 本地开发环境搭建 (Windows / Python 3.12 / uv)
+### 阶段一: 基础框架与技能构建 (2.9 - 2.22) ✅
+-   [x] 本地开发环境搭建 (Windows / Mac / Python 3.12 / uv)
 -   [x] Blueprint 工作流跑通与验证
 -   [x] SBOM 解析 BOM 头修复 + Windows 路径适配
 -   [x] Skills 插件化框架设计与实现 (BaseSkill + SkillRegistry)
 -   [x] IntelSkill / ConfigSkill / RemoteCodeSkill 开发完成
 -   [x] 单元测试 13/13 通过
 
-### 阶段二: 多智能体系统开发 (2.23 - 3.8)
--   [ ] Supervisor Agent 状态机设计 (LangGraph)
--   [ ] 异构 LLM 调度策略 (70B Supervisor + 8B Workers)
--   [ ] Intel / Code / Config / VEX 专业 Agent 开发
+### 阶段二: 多智能体系统开发 (2.23 - 3.8) ✅
+-   [x] Supervisor Agent 状态机设计 (LangGraph StateGraph)
+-   [x] Intel / Code / Config / VEX 四个专业 Agent 开发
+-   [x] 共享状态模型 (MultiAgentState) + VEX 判定逻辑
+-   [x] 单元测试 20/20 通过
+-   [x] 测试输入数据 (Log4j / Spring4Shell / Heartbleed)
+-   [x] Baseline 对比实验 — 准确率 100% vs Baseline 50%
 
-### 阶段三: CI/CD 集成与测试 (3.9 - 3.22)
--   [ ] GitHub Action 自动化插件
--   [ ] 模型微调与优化
+### 阶段三: CI/CD 集成与优化 (3.9 - 3.22) 🟡 进行中
+-   [x] GitHub Action 自动化测试 (`containerguard.yml`)
+-   [x] Prompt 工程优化 (Few-shot + 配置外置 `prompts.yml`)
+-   [x] Code Agent 扩展 (14 CVE 模式 + 改进启发式)
+-   [x] VEX Agent 增强 (标准 VEX justification 标签)
+-   [x] Streamlit 可视化 Dashboard (4 页)
+-   [ ] PR 触发漏洞扫描 + 自动评论
 
 ### 阶段四: OPA 策略门禁与交付 (3.23 - 4.5)
 -   [ ] OPA Rego 安全策略引擎
@@ -92,6 +149,8 @@ tests/
 
 2.  **安装依赖**:
     ```bash
+    uv venv --python 3.12
+    source .venv/bin/activate
     uv sync
     ```
 
@@ -101,14 +160,29 @@ tests/
     # 编辑 .env 文件，填入您的 NVIDIA_API_KEY
     ```
 
-4.  **运行 Demo 分析**:
+4.  **运行多 Agent 演示**:
     ```bash
-    nat run --config_file=src/vuln_analysis/configs/config-local.yml --input_file=src/vuln_analysis/data/input_messages/morpheus_23.11-runtime.json
+    uv run python scripts/demo_agents.py
     ```
 
-5.  **运行测试**:
+5.  **运行 Baseline 对比实验**:
     ```bash
-    uv run python -m pytest tests/test_skills.py -v
+    uv run python scripts/run_baseline.py
+    ```
+
+6.  **运行测试**:
+    ```bash
+    uv run python -m pytest tests/ -v
+    ```
+
+7.  **启动 Dashboard** (需额外安装 `pip install streamlit plotly`):
+    ```bash
+    streamlit run dashboard/app.py
+    ```
+
+8.  **查看项目进度**:
+    ```bash
+    uv run python scripts/check_progress.py
     ```
 
 ## 📄 许可证
