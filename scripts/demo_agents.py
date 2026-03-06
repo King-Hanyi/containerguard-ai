@@ -9,7 +9,19 @@ ContainerGuard AI — 多智能体协同演示脚本
 
 import asyncio
 import logging
+import os
 import sys
+from pathlib import Path
+
+# 加载 .env 环境变量
+_env_path = Path(__file__).resolve().parent.parent / ".env"
+if _env_path.exists():
+    with open(_env_path) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip())
 
 from vuln_analysis.data_models.input import (
     AgentMorpheusEngineInput, 
