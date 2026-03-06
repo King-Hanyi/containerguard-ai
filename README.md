@@ -22,28 +22,32 @@
 | 维度 | NVIDIA Blueprint (原始) | ContainerGuard AI (我们) |
 |:---|:---|:---|
 | **架构** | 单 Agent 线性流水线 | Supervisor + 4 子 Agent 并行 |
-| **代码分析** | 本地 Git Clone + FAISS VDB | GitHub API 远程搜索 |
+| **代码分析** | 本地 Git Clone + FAISS VDB | GitHub API 远程搜索 (RemoteCodeSkill) |
+| **VEX 判定** | 单 Agent + 单 LLM | 多维证据 → LLM 推理 (llama-3.1-70b) |
 | **功能扩展** | 硬编码函数 | 插件化 Skill + 装饰器注册 |
 | **执行方式** | 所有步骤串行 | 信息收集阶段三路并行 |
-| **LLM 策略** | 统一用一个模型 | 异构 LLM (70B + 8B) |
+| **LLM 策略** | 统一用一个模型 | 异构 LLM (70B Supervisor + 8B Workers) |
 | **Windows** | 路径长度崩溃 | 完全兼容 |
 
 ### Baseline 实验结果
 
-| 指标 | Baseline (单 Agent) | Ours (多 Agent) |
+| 指标 | Baseline (单 Agent) | Ours (多 Agent + LLM) |
 |:---|:---|:---|
 | **准确率** | 50% (2/4) | **100% (4/4)** |
 | **Unknown 率** | 50% | **0%** |
-| **平均置信度** | 40% | **85%** |
+| **平均置信度** | 40% | **88%** |
+| **平均耗时** | 45.8s/CVE | **1.64s/CVE** |
 
 ## ✨ 核心特性
 
+-   **LLM 驱动 VEX 判定**: VEX Agent 调用 NVIDIA NIM `llama-3.1-70b-instruct` 进行推理，基于多维证据生成标准 VEX 判定
 -   **多智能体协同**: Supervisor Agent 调度 Intel / Code / Config / VEX 四个子 Agent 并行工作
+-   **Agent ↔ Skill 分层架构**: 每个 Agent 集成对应 Skill，支持 API 实时调用 + 本地兜底双层策略
 -   **Skills 插件化框架**: 基于 `BaseSkill` 抽象基类 + `SkillRegistry` 注册机制，实现分析能力的热插拔扩展
--   **远程代码检索**: 通过 GitHub API 远程搜索代码（`RemoteCodeSkill`），替代本地 Git Clone + VDB 方案
--   **多源情报融合**: 集成 NVD / GHSA / RedHat / Ubuntu 等多个漏洞情报源（`IntelSkill`）
--   **容器配置审计**: 支持 File / HTTP / Manual 三种模式解析 SBOM（`ConfigSkill`）
--   **Prompt 工程优化**: Few-shot 示例 + 标准 VEX justification 标签 + 配置外置
+-   **远程代码检索**: Code Agent → RemoteCodeSkill → GitHub Code Search API，替代本地 Git Clone + VDB
+-   **多源情报融合**: Intel Agent → IntelSkill（NVD / GHSA / RedHat）+ 内置情报库 (7 个高频 CVE)
+-   **容器配置审计**: Config Agent → ConfigSkill，主动解析 SBOM 文件（支持 ANSI 码 + BOM 头处理）
+-   **Prompt 工程优化**: Few-shot 示例 + 标准 VEX justification 标签 + YAML 配置外置
 -   **CI/CD 集成**: GitHub Action 自动化测试与验证
 -   **可视化 Dashboard**: Streamlit 4 页交互式答辩演示界面
 -   **策略即代码** (规划中): 集成 OPA (Open Policy Agent)，实现自动化安全门禁
@@ -114,16 +118,17 @@ tests/
 ### 阶段二: 多智能体系统开发 (2.23 - 3.8) ✅
 -   [x] Supervisor Agent 状态机设计 (LangGraph StateGraph)
 -   [x] Intel / Code / Config / VEX 四个专业 Agent 开发
--   [x] 共享状态模型 (MultiAgentState) + VEX 判定逻辑
--   [x] 单元测试 20/20 通过
+-   [x] **Agent ↔ Skill 分层打通** (每个 Agent 集成对应 Skill + 兜底策略)
+-   [x] **VEX Agent 接入 NVIDIA NIM LLM** (llama-3.1-70b-instruct 实时推理)
+-   [x] 单元测试 33/33 通过 (20 Agent + 13 Skills)
 -   [x] 测试输入数据 (Log4j / Spring4Shell / Heartbleed)
 -   [x] Baseline 对比实验 — 准确率 100% vs Baseline 50%
 
 ### 阶段三: CI/CD 集成与优化 (3.9 - 3.22) 🟡 进行中
 -   [x] GitHub Action 自动化测试 (`containerguard.yml`)
--   [x] Prompt 工程优化 (Few-shot + 配置外置 `prompts.yml`)
--   [x] Code Agent 扩展 (14 CVE 模式 + 改进启发式)
--   [x] VEX Agent 增强 (标准 VEX justification 标签)
+-   [x] Prompt 工程优化 (Few-shot + YAML 配置外置 `prompts.yml`)
+-   [x] Code Agent (14 CVE 模式 + GitHub API 双层策略)
+-   [x] VEX Agent (LLM 推理 + 规则引擎双层策略)
 -   [x] Streamlit 可视化 Dashboard (4 页)
 -   [ ] PR 触发漏洞扫描 + 自动评论
 
