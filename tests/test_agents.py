@@ -27,7 +27,7 @@ from vuln_analysis.agents.state import (
 from vuln_analysis.agents.intel_agent import intel_agent_node
 from vuln_analysis.agents.code_agent import code_agent_node, _get_search_queries
 from vuln_analysis.agents.config_agent import config_agent_node
-from vuln_analysis.agents.vex_agent import vex_agent_node, _judge_vex_status
+from vuln_analysis.agents.vex_agent import vex_agent_node, _rule_based_judgment
 from vuln_analysis.agents.supervisor import build_supervisor_graph
 
 
@@ -117,23 +117,23 @@ class TestCodeAgent:
 class TestVEXJudgment:
 
     def test_affected_judgment(self):
-        status, _, conf = _judge_vex_status("CVE-1", True, "high", True, True, True)
+        status, _, conf = _rule_based_judgment("CVE-1", True, "high", True, True, True)
         assert status == "affected"
         assert conf >= 0.8
 
     def test_not_affected_no_package(self):
-        status, _, conf = _judge_vex_status("CVE-1", True, "high", False, False, False)
+        status, _, conf = _rule_based_judgment("CVE-1", True, "high", False, False, False)
         assert status == "not_affected"
         assert conf >= 0.7
 
     def test_not_affected_no_code(self):
-        status, _, conf = _judge_vex_status("CVE-1", True, "high", False, True, True)
+        status, _, conf = _rule_based_judgment("CVE-1", True, "high", False, True, True)
         assert status == "not_affected"
         assert conf >= 0.6
 
     def test_unknown_no_intel(self):
-        status, _, _ = _judge_vex_status("CVE-1", False, "unknown", False, False, False)
-        assert status == "unknown"
+        status, _, _ = _rule_based_judgment("CVE-1", False, "unknown", False, False, False)
+        assert status == "under_investigation"
 
     @pytest.mark.asyncio
     async def test_vex_agent_node(self):
