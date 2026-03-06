@@ -1,0 +1,98 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://containerguard.ai/vex/befdf5f0-5e3f-4223-9c58-303c0f1ae8b8",
+  "author": "ContainerGuard AI",
+  "timestamp": "2026-03-06T14:15:00+08:00",
+  "last_updated": "2026-03-06T06:17:46.405254+00:00",
+  "version": "1",
+  "tooling": "ContainerGuard AI v1.0.0",
+  "statements": [
+    {
+      "vulnerability": {
+        "@id": "https://nvd.nist.gov/vuln/detail/CVE-2023-44487",
+        "name": "CVE-2023-44487",
+        "description": "HTTP/2 Rapid Reset 攻击漏洞，攻击者可利用该漏洞发起大规模 DDoS 攻击。"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/nginx:1.25.3",
+          "identifiers": {
+            "purl": "pkg:oci/nginx:1.25.3"
+          }
+        }
+      ],
+      "status": "affected",
+      "impact_statement": "已确认受影响，需立即升级。"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://nvd.nist.gov/vuln/detail/CVE-2023-36632",
+        "name": "CVE-2023-36632",
+        "description": "Python stdlib email 模块在解析特殊构造的邮件头时存在递归栈溢出漏洞。"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/nginx:1.25.3",
+          "identifiers": {
+            "purl": "pkg:oci/nginx:1.25.3"
+          }
+        }
+      ],
+      "status": "affected",
+      "impact_statement": "建议在 48 小时内完成版本升级。"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://nvd.nist.gov/vuln/detail/CVE-2023-5678",
+        "name": "CVE-2023-5678",
+        "description": "OpenSSL 存在无效的 DH 密钥生成问题，可能导致应用程序崩溃（DoS）。"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/nginx:1.25.3",
+          "identifiers": {
+            "purl": "pkg:oci/nginx:1.25.3"
+          }
+        }
+      ],
+      "status": "fixed",
+      "impact_statement": "建议在下次定期维护窗口升级。"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://nvd.nist.gov/vuln/detail/CVE-2022-40897",
+        "name": "CVE-2022-40897",
+        "description": "Python setuptools 在解析特殊构造的 HTML 时存在 ReDoS 漏洞。"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/nginx:1.25.3",
+          "identifiers": {
+            "purl": "pkg:oci/nginx:1.25.3"
+          }
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "可在低优先级队列中按需升级。"
+    },
+    {
+      "vulnerability": {
+        "@id": "https://nvd.nist.gov/vuln/detail/CVE-2023-29491",
+        "name": "CVE-2023-29491",
+        "description": "ncurses 库在解析特殊终端配置时可能发生本地代码执行，需要本地访问权限。"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/nginx:1.25.3",
+          "identifiers": {
+            "purl": "pkg:oci/nginx:1.25.3"
+          }
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "当前安全配置规避了该漏洞的利用条件。"
+    }
+  ]
+}

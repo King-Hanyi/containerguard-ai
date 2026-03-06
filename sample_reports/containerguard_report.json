@@ -1,0 +1,89 @@
+{
+  "report_meta": {
+    "format": "ContainerGuard-JSON",
+    "version": "1.0.0",
+    "generated_at": "2026-03-06T06:17:46.404215+00:00"
+  },
+  "scan_target": "nginx:1.25.3",
+  "scan_time": "2026-03-06T14:15:00+08:00",
+  "summary": {
+    "total": 5,
+    "critical": 1,
+    "high": 2,
+    "medium": 1,
+    "low": 1,
+    "unknown": 0
+  },
+  "cve_details": [
+    {
+      "cve_id": "CVE-2023-44487",
+      "severity": "HIGH",
+      "cvss_score": 7.5,
+      "description": "HTTP/2 Rapid Reset 攻击漏洞，攻击者可利用该漏洞发起大规模 DDoS 攻击。",
+      "affected_package": "nghttp2 1.52.0",
+      "fixed_version": "nghttp2 1.57.0",
+      "intel": "该 CVE 已被大规模在野利用，CISA 已将其加入已知利用漏洞目录（KEV）。攻击面评分：高，利用复杂度：低。",
+      "agent_verdict": "affected",
+      "verdict_basis": "当前镜像使用 nghttp2 1.52.0，低于已修复版本 1.57.0。",
+      "impact_statement": "已确认受影响，需立即升级。"
+    },
+    {
+      "cve_id": "CVE-2023-36632",
+      "severity": "CRITICAL",
+      "cvss_score": 9.8,
+      "description": "Python stdlib email 模块在解析特殊构造的邮件头时存在递归栈溢出漏洞。",
+      "affected_package": "python3 3.11.2",
+      "fixed_version": "python3 3.11.8",
+      "intel": "BRON 知识图谱关联 ATT&CK T1190（利用面向公众的应用程序），CAPEC-100 溢出缓冲区。PoC 代码已公开。",
+      "agent_verdict": "affected",
+      "verdict_basis": "容器运行时 Python 版本低于官方安全修复版本。",
+      "impact_statement": "建议在 48 小时内完成版本升级。"
+    },
+    {
+      "cve_id": "CVE-2023-5678",
+      "severity": "HIGH",
+      "cvss_score": 7.5,
+      "description": "OpenSSL 存在无效的 DH 密钥生成问题，可能导致应用程序崩溃（DoS）。",
+      "affected_package": "openssl 3.0.9",
+      "fixed_version": "openssl 3.0.12",
+      "intel": "暂未发现在野利用证据，PoC 未公开。风险评估：中等。",
+      "agent_verdict": "fixed",
+      "verdict_basis": "基础镜像已在后续 patch 中修复，当前运行版本受影响。",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "建议在下次定期维护窗口升级。"
+    },
+    {
+      "cve_id": "CVE-2022-40897",
+      "severity": "MEDIUM",
+      "cvss_score": 5.9,
+      "description": "Python setuptools 在解析特殊构造的 HTML 时存在 ReDoS 漏洞。",
+      "affected_package": "setuptools 65.5.0",
+      "fixed_version": "setuptools 65.5.1",
+      "intel": "仅在处理不受信任的第三方包元数据时触发，生产环境风险较低。",
+      "agent_verdict": "not_affected",
+      "verdict_basis": "该镜像不对外提供 Python 包管理功能，代码路径不可达。",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "可在低优先级队列中按需升级。"
+    },
+    {
+      "cve_id": "CVE-2023-29491",
+      "severity": "LOW",
+      "cvss_score": 3.3,
+      "description": "ncurses 库在解析特殊终端配置时可能发生本地代码执行，需要本地访问权限。",
+      "affected_package": "ncurses 6.4",
+      "fixed_version": "暂无官方修复版本",
+      "intel": "需要本地访问权限，远程利用不可行。CVSS 向量显示攻击范围：本地。",
+      "agent_verdict": "not_affected",
+      "verdict_basis": "容器以 non-root 用户运行且无交互式终端，攻击向量不适用。",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "当前安全配置规避了该漏洞的利用条件。"
+    }
+  ],
+  "remediation_suggestions": [
+    "立即升级 nghttp2 至 1.57.0 或以上版本（CVE-2023-44487，已在野利用）。",
+    "将 Python 运行时从 3.11.2 升级至 3.11.8 或以上（CVE-2023-36632）。",
+    "在下次维护窗口将 OpenSSL 升级至 3.0.12（CVE-2023-5678）。",
+    "采用最小化基础镜像策略（如 distroless），减少不必要组件的攻击面。",
+    "配置容器以 non-root 用户运行，并限制文件系统写权限（降低本地漏洞影响）。"
+  ]
+}
