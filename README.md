@@ -69,6 +69,9 @@ src/vuln_analysis/
 │   ├── intel.py             # IntelSkill — 多源漏洞情报检索
 │   ├── config.py            # ConfigSkill — SBOM 解析
 │   └── remote_code.py       # RemoteCodeSkill — GitHub API 代码搜索
+├── knowledge/               # BRON 知识图谱模块 (卢周全)
+│   ├── bron_loader.py       # BRONLoader — 多格式 BRON 数据加载
+│   └── knowledge_graph.py   # KnowledgeGraph — CVE↔CWE/CAPEC/ATT&CK 查询
 ├── configs/                 # 配置文件
 │   └── prompts.yml          # Agent Prompt 配置 (Few-shot 示例)
 ├── data/                    # 测试数据
@@ -89,6 +92,7 @@ dashboard/
 tests/
 ├── test_skills.py           # Skills 框架测试 (13 项)
 ├── test_agents.py           # 多 Agent 系统测试 (20 项)
+├── test_bron.py             # BRON 知识图谱测试 (卢周全)
 └── test_java_script_extended.py
 
 .github/workflows/
