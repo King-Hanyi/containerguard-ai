@@ -195,3 +195,6 @@ tags
 
 
 # End of https://www.gitignore.io/api/vim,c++,cmake,python,synology
+
+# Ignore cloned BRON nested repository
+BRON/
