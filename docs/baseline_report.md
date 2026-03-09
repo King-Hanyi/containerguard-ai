@@ -1,101 +1,163 @@
-# ContainerGuard AI — Baseline 对比实验报告
+# ContainerGuard AI — 架构对比分析报告
 
-> **实验日期**: 2026-03-06  
-> **实验人员**: 金韩溢  
-> **版本**: v1.0
+> 日期: 2026-03-09  
+> 本报告基于对 NVIDIA Vulnerability Analysis Blueprint 源码的实际分析
 
 ---
 
-## 1. 实验目的
+## 一、对比背景
 
-验证 ContainerGuard AI 的多 Agent + Skills 架构相比 NVIDIA Blueprint 原始单 Agent 流水线在以下指标上的提升：
-
-- 漏洞判定准确率 (Accuracy)
-- Unknown 判定率 (减少不确定性)
-- 判定置信度 (Confidence)
-- 分析效率 (时间成本)
-
-## 2. 实验设计
-
-### 2.1 实验组
-
-| 对照组 | 系统配置 |
+| 项目 | 说明 |
 |:---|:---|
-| **Baseline** | NVIDIA Blueprint 原始 `cve_agent_workflow` 单 Agent 流水线 |
-| **Ours** | ContainerGuard AI 多 Agent (Supervisor + Intel + Code + Config + VEX) + Skills + LLM |
+| Baseline | NVIDIA Agent Morpheus Vulnerability Analysis Blueprint（Apache-2.0 开源） |
+| Ours | ContainerGuard AI — 基于 Blueprint 的多智能体改进系统 |
+| 对比方式 | **架构层面的定性分析** + 基于架构差异的性能预测 |
 
-### 2.2 测试集
+> **注意**: 本文未包含 Baseline 的实际运行数据。原因是 Blueprint 需要完整 NVIDIA NIM 集群环境（含 Morpheus SDK、NeMo LLM、向量数据库等），当前开发环境不满足完整部署条件。后续如果条件允许，应在同一环境中做 A/B 实验。
 
-选取 4 个具有代表性的 CVE，覆盖不同语言生态和严重级别：
+---
 
-| CVE ID | 名称 | 严重级别 | 语言生态 | Ground Truth |
-|:---|:---|:---|:---|:---|
-| CVE-2021-44228 | Log4Shell | Critical (10.0) | Java / Maven | **affected** |
-| CVE-2022-22965 | Spring4Shell | Critical (9.8) | Java / Maven | **affected** |
-| CVE-2014-0160 | Heartbleed | High (7.5) | C / OpenSSL | **affected** |
-| CVE-2023-36632 | Python parseaddr DoS | Medium (7.5) | Python / CPython | **not_affected** |
+## 二、原始 Blueprint 流水线分析
 
-### 2.3 评判指标
+通过源码审查，Blueprint 的处理流程如下：
 
-| 指标 | 定义 | 计算方式 |
+```
+cve_fetch_intel → cve_check_vuln_deps → cve_process_sbom
+       → cve_checklist → cve_agent → cve_summarize → cve_justify → cve_output
+```
+
+### 关键特征
+
+| 特征 | Blueprint 实现 | 源码位置 |
 |:---|:---|:---|
-| Accuracy | 判定结果与 Ground Truth 一致的比例 | correct / total |
-| Unknown Rate | 输出为 "unknown" 的比例 | unknown / total |
-| Avg Confidence | 平均置信度 | Σconfidence / total |
-| Avg Time | 平均每个 CVE 的分析时间 | Σtime / total |
+| **处理模式** | 单 Agent 串行 — 一个 `cve_agent` 使用 LangChain AgentExecutor 逐步执行 | `functions/cve_agent.py` |
+| **LLM 调用** | 使用 NeMo LLM，通过 NAT Builder 配置 | `CVEAgentExecutorToolConfig.llm_name` |
+| **情报获取** | NVD + RedHat + Ubuntu + GHSA 多源（但串行调用） | `functions/cve_fetch_intel.py` |
+| **依赖检查** | 使用 `univers` 库做精确版本范围比较 | `functions/cve_check_vuln_deps.py` |
+| **Checklist** | LLM 生成每个 CVE 的检查项，然后 Agent 逐项回答 | `functions/cve_checklist.py` |
+| **判定** | LLM 生成 summary → LLM 再做 justification（两次 LLM 调用） | `cve_summarize.py` + `cve_justify.py` |
+| **并发控制** | 有 `AsyncLimiter` 限流，但处理逻辑是串行的 | `utils/concurrency.py` |
 
-## 3. 实验结果
+### Blueprint 的优势（我们没有的）
 
-### 3.1 总体对比
-
-| 指标 | Baseline (单 Agent) | Ours (多 Agent + LLM) | 提升 |
-|:---|:---|:---|:---|
-| **准确率** | 50% (2/4) | **100% (4/4)** | **+50%** |
-| **Unknown 率** | 50% (2/4) | **0% (0/4)** | **-50%** |
-| **平均置信度** | 40% | **87.5%** | **+47.5%** |
-| **平均耗时** | 45.75 秒/CVE | **1.64 秒/CVE** | **27.9x 加速** |
-
-### 3.2 逐 CVE 详细对比
-
-| CVE | Ground Truth | Baseline 判定 | Baseline 置信度 | Ours 判定 | Ours 置信度 | Ours Justification |
-|:---|:---|:---|:---|:---|:---|:---|
-| CVE-2021-44228 | affected | ✅ affected | 60% | ✅ affected | 90% | 漏洞包+代码均存在 |
-| CVE-2022-22965 | affected | ❌ unknown | 30% | ✅ affected | 90% | 漏洞包+代码均存在 |
-| CVE-2014-0160 | affected | ❌ unknown | 20% | ✅ affected | 90% | 漏洞包+代码均存在 |
-| CVE-2023-36632 | not_affected | ✅ not_affected | 50% | ✅ not_affected | 80% | vulnerable_code_not_in_execute_path |
-
-### 3.3 关键分析
-
-**Baseline 失败原因**：
-- **CVE-2022-22965 (Spring4Shell)**: 单 Agent 无法关联 SBOM 中的 `spring-beans` 包与漏洞，输出 unknown。
-- **CVE-2014-0160 (Heartbleed)**: 单 Agent 缺乏 OpenSSL 心跳扩展的代码模式知识，无法判定。
-
-**Ours 成功原因**：
-1. **Intel Agent** 提供了完整的漏洞严重级别和描述信息。
-2. **Code Agent** 通过 GitHub API / 模式表匹配到了漏洞函数（如 `JndiLookup`, `dtls1_process_heartbeat`）。
-3. **Config Agent** 从 SBOM 中确认了漏洞包的存在（如 `log4j-core 2.14.0`）。
-4. **VEX Agent** 调用 NVIDIA NIM LLM (llama-3.1-70b-instruct) 综合三维证据做出推理判定。
-
-## 4. 架构优势总结
-
-| 维度 | 为什么多 Agent 更好 |
+| 优势 | 说明 |
 |:---|:---|
-| **信息完整性** | 三路并行收集情报/代码/配置，不遗漏任何维度 |
-| **判定准确性** | VEX Agent 基于多维证据 + LLM 推理，而非单一规则 |
-| **可解释性** | 每个 Agent 输出独立证据，判定过程可追溯 |
-| **扩展性** | 新增 Agent 只需注册到 Supervisor，不影响现有逻辑 |
+| ✅ 精确版本比较 | 使用 `univers` 库做语义化版本范围匹配（我们用字符串匹配） |
+| ✅ Checklist 机制 | LLM 先生成检查清单再逐项推理，比直接判定更严谨 |
+| ✅ 完整 NIM 集成 | 与 NVIDIA NIM 微服务深度集成，支持向量检索 |
+| ✅ 生产级错误处理 | 完善的 rate limiting、异常替换、超时恢复 |
 
-## 5. 局限性
+---
 
-1. 测试集规模有限（4 个 CVE），尚需扩大以增强统计意义。
-2. Baseline 数据基于文献参考值，未在同一环境下运行原始 Blueprint 全流程。
-3. 耗时对比中 Ours 不含网络 I/O 延迟（GitHub API 搜索在模式表模式下跳过）。
+## 三、架构改进对比
 
-## 6. 结论
+### 3.1 核心架构差异
 
-ContainerGuard AI 的多 Agent + Skills + LLM 架构在所有指标上均优于 NVIDIA Blueprint 原始单 Agent 流水线：
-- **准确率从 50% 提升至 100%**
-- **Unknown 率从 50% 降至 0%**
-- **置信度提升 47.5 个百分点**
+| 维度 | Blueprint | ContainerGuard AI (Ours) |
+|:---|:---|:---|
+| **Agent 架构** | 单 Agent + 9 个串行函数 | Supervisor + 4 专业 Agent |
+| **执行方式** | 串行：fetch → check → process → checklist → agent → ... | 并行：Intel / Code / Config 同时运行 |
+| **状态管理** | `AgentMorpheusEngineState`（单一状态对象传递） | `MultiAgentState` + LangGraph 状态机 |
+| **LLM 使用** | 3 次调用：checklist + agent loop + justify | 1 次调用：VEX Agent 综合推理 |
+| **可扩展性** | 硬编码 9 个 NAT function | Skills 插件框架（`BaseSkill` 抽象 + 注册表） |
+| **知识增强** | 仅 NVD/GHSA/RedHat API | + BRON 知识图谱（CVE→CWE→CAPEC→ATT&CK） |
+| **安全策略** | 无策略引擎 | OPA Engine（策略即代码） |
+| **代码分析** | 本地 Git 源码搜索 | GitHub Code Search API + 模式表 |
 
-实验数据详见 `docs/baseline_results.json`。
+### 3.2 详细架构图对比
+
+**Blueprint 流水线（串行）：**
+
+```
+Input → [fetch_intel] → [check_deps] → [process_sbom]
+      → [checklist(LLM)] → [agent(LLM)] → [summarize(LLM)]
+      → [justify(LLM)] → Output
+
+每个 CVE 顺序经过 7 个步骤，包含 3-4 次 LLM 调用
+```
+
+**ContainerGuard AI（并行多 Agent）：**
+
+```
+Input → Supervisor.init
+      → Supervisor.gather
+            ├── Intel Agent (NVD/GHSA/BRON)         ─┐
+            ├── Code Agent (GitHub API/模式表)       ─┤ 并行
+            └── Config Agent (SBOM 解析)             ─┘
+      → VEX Agent (LLM 1次调用，Few-shot 综合推理)
+      → OPA Engine (策略决策)
+      → Output
+```
+
+### 3.3 LLM 调用对比
+
+| 项目 | Blueprint | Ours |
+|:---|:---|:---|
+| Checklist 生成 | 1 次 LLM / CVE | 无（内置模式表替代） |
+| Agent 推理 | 1-3 次 LLM / CVE（Agent loop） | 0（规则 + 模式表） |
+| Summary 生成 | 1 次 LLM / CVE | 0（结构化输出） |
+| Justification | 1 次 LLM / CVE | 1 次 LLM / CVE（综合所有证据） |
+| **总计** | **4-6 次 LLM / CVE** | **1 次 LLM / CVE** |
+
+---
+
+## 四、性能预期
+
+> ⚠️ 以下为基于架构分析的**理论预测**，非实测数据。
+
+### 4.1 速度预期
+
+| 因素 | Blueprint | Ours | 预期影响 |
+|:---|:---|:---|:---|
+| 信息收集 | 串行（Intel → Deps → SBOM） | 并行（3 路同时） | **约 3x 加速** |
+| LLM 调用次数 | 4-6 次/CVE | 1 次/CVE | **约 4-6x 减少 Token** |
+| LLM 单次 latency | ~5-15s (NIM) | ~2-3s (NIM API) | 取决于模型和基础设施 |
+
+**预期速度：** 在相同 LLM 后端下，我们的系统应快 **2-5 倍**（保守估计），主要来源是并行化和减少 LLM 调用次数。
+
+### 4.2 准确性预期
+
+准确性取决于具体测试集和 LLM 能力，无法仅凭架构预测。但有以下定性分析：
+
+| 可能更好 | 可能更差 |
+|:---|:---|
+| 知识图谱提供攻击链上下文 → LLM 推理更完整 | 我们缺少 Checklist 机制 → 可能遗漏细节 |
+| Few-shot 示例引导 → 输出格式更稳定 | 我们的版本比较是字符串匹配 → 不如 `univers` 精确 |
+| 多 Agent 交叉验证 → 减少单点失误 | 我们内置情报库有限 → 冷启动问题 |
+
+**诚实结论：** 准确性方面，两个系统各有优劣。Blueprint 有更成熟的 Checklist+Agent 推理链，我们有更丰富的知识增强和并行交叉验证。实际效果需要同环境对比。
+
+### 4.3 成本预期
+
+| 维度 | Blueprint | Ours |
+|:---|:---|:---|
+| Token 消耗/CVE | 高（4-6 次 LLM 调用） | 低（1 次 LLM 调用） |
+| 部署复杂度 | 高（需要完整 NIM 集群） | 低（单 API Key 即可运行） |
+| 扩展成本 | 高（修改 NAT 配置） | 低（新增 Skill 即可） |
+
+---
+
+## 五、我们需要改进的方向
+
+基于对 Blueprint 源码的分析，以下是我们**确实不如**原始系统的地方：
+
+| 短板 | Blueprint 做法 | 我们的改进思路 |
+|:---|:---|:---|
+| **版本比较精度** | `univers` 库 — 支持 SemVer/deb/rpm 范围 | 引入 `univers` 替代字符串匹配 |
+| **Checklist 推理** | 先生成检查清单再逐项推理 | 可在 VEX Prompt 中内嵌 Checklist 步骤 |
+| **Agent 自主性** | ReAct Agent 可自主决定调用哪些工具 | 我们是固定流程，可加入条件分支 |
+| **端到端集成** | 与 Morpheus SDK 深度集成 | 我们是独立系统，需要手动集成 |
+
+---
+
+## 六、总结
+
+| 维度 | 结论 |
+|:---|:---|
+| **速度** | 我们的并行架构 + 减少 LLM 调用，预期比串行 Blueprint 更快 |
+| **准确性** | 各有优劣，需要同环境实测 |
+| **可扩展性** | 我们的 Skills 插件框架更灵活 |
+| **部署门槛** | 我们更低（单 API Key vs 完整 NIM 集群） |
+| **产品成熟度** | Blueprint 更成熟（生产级错误处理、限流、集成测试） |
+
+> **下一步**: 在 3090 服务器上部署完整 Blueprint 环境，运行同一测试集的 A/B 实验，获取真实对比数据。
