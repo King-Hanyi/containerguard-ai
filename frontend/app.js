@@ -121,7 +121,54 @@ document.querySelectorAll('.nav-link').forEach(link => {
     });
 });
 
-// ---- 扫描流程模拟 ----
+// ---- Docker 镜像选择 ----
+function switchInputMode(mode) {
+    document.querySelectorAll('.input-tab').forEach(t => t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('input-manual').classList.toggle('hidden', mode === 'docker');
+    document.getElementById('input-docker').classList.toggle('hidden', mode !== 'docker');
+    if (mode === 'docker') loadDockerImages();
+}
+
+async function loadDockerImages() {
+    const select = document.getElementById('docker-select');
+    select.innerHTML = '<option value="">加载中...</option>';
+    try {
+        const resp = await fetch('/api/docker/images');
+        const data = await resp.json();
+        if (data.images && data.images.length > 0) {
+            select.innerHTML = data.images.map(img =>
+                `<option value="${img.name}">${img.name} (${img.size}, ${img.created})</option>`
+            ).join('');
+        } else {
+            select.innerHTML = `<option value="">无本地镜像${data.error ? ' — ' + data.error : ''}</option>`;
+        }
+    } catch (e) {
+        select.innerHTML = '<option value="">无法连接 Docker — 请确保 Docker 已启动</option>';
+    }
+}
+
+function startScanDocker() {
+    const select = document.getElementById('docker-select');
+    if (select.value) {
+        document.getElementById('scan-url').value = select.value;
+        startScan();
+    }
+}
+
+// ---- 报告导出 ----
+function exportReport(format) {
+    const target = document.getElementById('scan-url')?.value || 'container scan';
+    const url = `/api/report?format=${format}&target=${encodeURIComponent(target)}`;
+
+    // 通过隐藏 iframe 触发下载
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ContainerGuard_Report.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 const SCAN_STEPS = [
     { text: "📦 解析输入: 识别 Docker 镜像/GitHub 仓库...", pct: 5, delay: 300 },
     { text: "📋 提取 SBOM: 分析容器依赖清单...", pct: 12, delay: 500 },
@@ -260,10 +307,7 @@ function closeDetail() {
     document.getElementById('detail-panel').classList.add('hidden');
 }
 
-// ---- 导出 PDF (模拟) ----
-function downloadReport() {
-    alert('📄 PDF 导出功能正在开发中。\n当前可通过浏览器 Print → Save as PDF 导出。');
-}
+// (报告导出已移至 exportReport 函数)
 
 // ---- Agent 流程动画 ----
 function animateFlow() {

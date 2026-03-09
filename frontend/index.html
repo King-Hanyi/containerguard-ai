@@ -41,13 +41,25 @@
         <div class="scan-container">
             <div class="scan-input-box">
                 <div class="input-group">
-                    <label class="input-label">🔗 GitHub 仓库 / Docker 镜像</label>
-                    <div class="input-row">
+                    <label class="input-label">🔗 目标选择 — GitHub 仓库 / Docker 镜像</label>
+                    <div class="input-tabs">
+                        <button class="input-tab active" onclick="switchInputMode('manual')">手动输入</button>
+                        <button class="input-tab" onclick="switchInputMode('docker')">本地 Docker 镜像</button>
+                    </div>
+                    <div id="input-manual" class="input-row">
                         <input type="text" id="scan-url" class="scan-input"
                             placeholder="例: https://github.com/apache/logging-log4j2 或 nginx:1.25"
                             value="nvcr.io/nvidia/morpheus:23.11-runtime">
                         <button id="scan-btn" class="scan-btn" onclick="startScan()">
                             <span id="scan-btn-text">🚀 开始扫描</span>
+                        </button>
+                    </div>
+                    <div id="input-docker" class="input-row hidden">
+                        <select id="docker-select" class="scan-input">
+                            <option value="">正在加载本地 Docker 镜像...</option>
+                        </select>
+                        <button class="scan-btn" onclick="startScanDocker()">
+                            <span>🐳 扫描镜像</span>
                         </button>
                     </div>
                 </div>
@@ -129,7 +141,11 @@
                 <h2 class="section-title">漏洞分析报告</h2>
                 <p class="section-desc" id="report-target">目标: nvcr.io/nvidia/morpheus:23.11-runtime</p>
             </div>
-            <button class="download-btn" onclick="downloadReport()">📄 导出 PDF</button>
+            <div class="export-group">
+                <button class="download-btn" onclick="exportReport('md')">📝 Markdown</button>
+                <button class="download-btn" onclick="exportReport('html')">🌐 HTML/PDF</button>
+                <button class="download-btn" onclick="exportReport('docx')">📄 Word</button>
+            </div>
         </div>
 
         <!-- OPA 策略门禁 -->

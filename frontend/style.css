@@ -257,6 +257,46 @@ body {
     outline: none;
 }
 
+/* Tab切换 */
+.input-tabs {
+    display: flex;
+    gap: .25rem;
+    margin-bottom: .6rem;
+}
+
+.input-tab {
+    padding: .35rem .8rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: .78rem;
+    font-weight: 500;
+    transition: all .2s;
+}
+
+.input-tab.active {
+    background: rgba(99, 102, 241, .15);
+    color: var(--accent-2);
+    border-color: var(--accent);
+}
+
+.input-tab:hover {
+    background: rgba(255, 255, 255, .05);
+}
+
+/* 导出按钮组 */
+.export-group {
+    display: flex;
+    gap: .5rem;
+}
+
+.export-group .download-btn {
+    font-size: .78rem;
+    padding: .45rem .8rem;
+}
+
 /* ---- 进度条 ---- */
 .scan-progress {
     background: var(--bg-card);
