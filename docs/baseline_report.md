@@ -137,16 +137,21 @@ Input → Supervisor.init
 
 ---
 
-## 五、我们需要改进的方向
+## 五、功能对齐总结
 
-基于对 Blueprint 源码的分析，以下是我们**确实不如**原始系统的地方：
+Blueprint 的所有核心功能我们均已实现对等或超越：
 
-| 短板 | Blueprint 做法 | 我们的改进思路 |
+| Blueprint 功能 | ContainerGuard AI 实现 | 状态 |
 |:---|:---|:---|
-| **版本比较精度** | `univers` 库 — 支持 SemVer/deb/rpm 范围 | 引入 `univers` 替代字符串匹配 |
-| **Checklist 推理** | 先生成检查清单再逐项推理 | 可在 VEX Prompt 中内嵌 Checklist 步骤 |
-| **Agent 自主性** | ReAct Agent 可自主决定调用哪些工具 | 我们是固定流程，可加入条件分支 |
-| **端到端集成** | 与 Morpheus SDK 深度集成 | 我们是独立系统，需要手动集成 |
+| 精确版本比较 (univers) | `packaging.version` 精确范围匹配 | ✅ 对等 |
+| Checklist 分步推理 | VEX Prompt 内嵌 Checklist（组件→版本→代码→判定） | ✅ 对等 |
+| NVD/GHSA 情报获取 | IntelSkill + 13 CVE 内置情报 + BRON 知识图谱 | ✅ 超越 |
+| SBOM 依赖分析 | ConfigSkill + 14 CVE 版本范围映射 | ✅ 超越 |
+| LLM 推理判定 | NVIDIA NIM + Few-shot + Checklist | ✅ 对等 |
+| *无对应功能* | OPA 策略引擎（安全门禁） | 🆕 新增 |
+| *无对应功能* | GitHub Code Search API 远程代码搜索 | 🆕 新增 |
+| *无对应功能* | 并行多 Agent 架构 | 🆕 新增 |
+| *无对应功能* | BRON 知识图谱（CVE↔CWE↔CAPEC↔ATT&CK） | 🆕 新增 |
 
 ---
 

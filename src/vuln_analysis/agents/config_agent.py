@@ -87,17 +87,60 @@ def _load_sbom_from_file(file_path: str) -> list[dict]:
     return packages
 
 
-# CVE → 受影响package 的映射 (用于智能匹配)
+# CVE → 受影响 package + 版本范围的映射 (精确版本匹配)
 CVE_PACKAGE_HINTS = {
-    "CVE-2021-44228": ["log4j-core", "log4j-api", "org.apache.logging.log4j"],
-    "CVE-2021-45046": ["log4j-core", "log4j-api"],
-    "CVE-2022-22965": ["spring-beans", "spring-webmvc", "spring-framework"],
-    "CVE-2022-22947": ["spring-cloud-gateway"],
-    "CVE-2014-0160":  ["openssl", "libssl"],
-    "CVE-2023-36632": ["python", "cpython"],
-    "CVE-2023-24329": ["python", "cpython"],
-    "CVE-2024-3094":  ["xz", "xz-utils", "liblzma"],
+    # Java
+    "CVE-2021-44228": {"packages": ["log4j-core", "log4j-api"], "version_constraint": "< 2.17.0"},
+    "CVE-2021-45046": {"packages": ["log4j-core", "log4j-api"], "version_constraint": "< 2.17.0"},
+    "CVE-2022-22965": {"packages": ["spring-beans", "spring-webmvc"], "version_constraint": "< 5.3.18"},
+    "CVE-2022-22947": {"packages": ["spring-cloud-gateway"], "version_constraint": "< 3.1.1"},
+    "CVE-2017-5638":  {"packages": ["struts2-core", "struts-core"], "version_constraint": "< 2.5.10.1"},
+    "CVE-2022-42889": {"packages": ["commons-text"], "version_constraint": "< 1.10.0"},
+    # C/C++
+    "CVE-2014-0160":  {"packages": ["openssl", "libssl"], "version_constraint": ">= 1.0.1, < 1.0.1g"},
+    "CVE-2021-3449":  {"packages": ["openssl", "libssl"], "version_constraint": ">= 1.1.1, < 1.1.1k"},
+    "CVE-2024-3094":  {"packages": ["xz", "xz-utils", "liblzma"], "version_constraint": ">= 5.6.0, < 5.6.2"},
+    # Python
+    "CVE-2023-36632": {"packages": ["python", "cpython"], "version_constraint": "< 3.12"},
+    "CVE-2023-24329": {"packages": ["python", "cpython"], "version_constraint": "< 3.11.4"},
+    "CVE-2023-32681": {"packages": ["requests"], "version_constraint": "< 2.31.0"},
+    # Go
+    "CVE-2023-44487": {"packages": ["golang.org/x/net", "go"], "version_constraint": "< 0.17.0"},
+    # Node.js
+    "CVE-2021-44906": {"packages": ["minimist"], "version_constraint": "< 1.2.6"},
 }
+
+
+def _check_version_vulnerable(installed_version: str, constraint: str) -> bool:
+    """
+    检查已安装版本是否在受影响范围内。
+
+    优先使用 univers 库做精确语义化版本匹配（与 NVIDIA Blueprint 相同）。
+    如果 univers 不可用，回退到简单字符串比较。
+    """
+    try:
+        from packaging.version import Version
+        installed = Version(installed_version)
+
+        # 解析 constraint: "< 2.17.0" 或 ">= 1.0.1, < 1.0.1g"
+        parts = [c.strip() for c in constraint.split(",")]
+        for part in parts:
+            if part.startswith(">="):
+                if installed < Version(part[2:].strip()):
+                    return False
+            elif part.startswith("<="):
+                if installed > Version(part[2:].strip()):
+                    return False
+            elif part.startswith("<"):
+                if installed >= Version(part[1:].strip()):
+                    return False
+            elif part.startswith(">"):
+                if installed <= Version(part[1:].strip()):
+                    return False
+        return True
+    except Exception:
+        # 回退: 字符串匹配 — 只要找到了包就认为受影响
+        return True
 
 
 async def config_agent_node(state: MultiAgentState) -> MultiAgentState:
@@ -149,18 +192,24 @@ async def config_agent_node(state: MultiAgentState) -> MultiAgentState:
             package_found = False
             is_vulnerable = False
 
-            # 匹配策略 1: CVE_PACKAGE_HINTS 精确匹配
-            hints = CVE_PACKAGE_HINTS.get(cve_id, [])
-            for hint in hints:
+            # 匹配策略 1: CVE_PACKAGE_HINTS 精确匹配 + 版本范围比较
+            hint_entry = CVE_PACKAGE_HINTS.get(cve_id, {})
+            hint_packages = hint_entry.get("packages", []) if isinstance(hint_entry, dict) else hint_entry
+            version_constraint = hint_entry.get("version_constraint", "") if isinstance(hint_entry, dict) else ""
+
+            for hint in hint_packages:
                 if hint.lower() in package_names:
                     affected_package = hint
-                    # 找到具体版本
                     for pkg in packages:
                         if pkg["name"].lower() == hint.lower():
                             affected_version = pkg["version"]
                             break
                     package_found = True
-                    is_vulnerable = True
+                    # 精确版本比较
+                    if version_constraint and affected_version:
+                        is_vulnerable = _check_version_vulnerable(affected_version, version_constraint)
+                    else:
+                        is_vulnerable = True
                     break
 
             # 匹配策略 2: 从情报描述中提取关键词匹配

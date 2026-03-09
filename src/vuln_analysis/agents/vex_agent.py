@@ -70,10 +70,16 @@ def _build_llm_prompt(cve_id: str, evidence: dict) -> str:
 
     prompt = f"""你是一个专业的容器安全分析师，专门负责 VEX (Vulnerability Exploitability eXchange) 判定。
 
-你需要基于以下多维证据，判断 CVE 是否影响目标容器镜像。
+你需要基于以下多维证据，**按 Checklist 逐步推理**，判断 CVE 是否影响目标容器镜像。
+
+## Checklist 推理步骤（必须逐步回答）
+1. **组件存在性**: SBOM 中是否包含漏洞组件？（package_found）
+2. **版本受影响**: 已安装版本是否在漏洞影响范围内？（is_vulnerable）
+3. **代码可达性**: 漏洞函数/入口是否在代码执行路径上？（code_found）
+4. **综合判定**: 基于以上 3 项，做出最终 VEX 判定
 
 ## 判定规则
-- **affected**: 漏洞包存在于 SBOM 中，且版本在受影响范围内，且代码中存在漏洞函数调用
+- **affected**: 组件存在 AND 版本受影响 AND 代码可达
 - **not_affected**: 以下任一条件成立:
   - component_not_present: SBOM 中不包含漏洞组件
   - vulnerable_code_not_present: 漏洞代码不在容器中
@@ -90,15 +96,21 @@ CVE ID: {cve_id}
 - 情报: severity={evidence.get('severity', 'unknown')}, description={evidence.get('description', 'N/A')[:200]}
 - 代码搜索: code_found={evidence.get('code_found', False)}, evidence={evidence.get('code_evidence', 'N/A')[:150]}
 - 依赖检查: package_found={evidence.get('package_found', False)}, package={evidence.get('package_name', 'N/A')} {evidence.get('package_version', '')}, is_vulnerable={evidence.get('is_vulnerable', False)}
+- 攻击链: {evidence.get('attack_chain', '无 BRON 数据')}
 
 ## 请输出你的判定
-请严格按以下 JSON 格式回复:
+先完成 Checklist 推理，然后严格按以下 JSON 格式回复:
 ```json
 {{
+  "checklist": {{
+    "component_present": true或false,
+    "version_vulnerable": true或false,
+    "code_reachable": true或false
+  }},
   "status": "affected 或 not_affected 或 under_investigation",
   "justification": "选择一个标准理由标签或简要说明",
   "confidence": 0.0到1.0之间的置信度,
-  "reasoning": "简要分析推理过程"
+  "reasoning": "基于 Checklist 的逐步分析推理过程"
 }}
 ```"""
     return prompt
