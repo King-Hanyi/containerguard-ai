@@ -64,9 +64,9 @@ function drawRiskChart() {
     const cx = 140, cy = 140, r = 100;
 
     const slices = [
-        { value: 2, color: '#ef4444', label: 'Critical' },
-        { value: 1, color: '#f59e0b', label: 'High' },
-        { value: 1, color: '#3b82f6', label: 'Medium' },
+        { value: 5, color: '#ef4444', label: 'Critical' },
+        { value: 3, color: '#f59e0b', label: 'High' },
+        { value: 2, color: '#3b82f6', label: 'Medium' },
     ];
     const total = slices.reduce((s, d) => s + d.value, 0);
 
@@ -102,7 +102,7 @@ function drawRiskChart() {
     ctx.font = '700 28px "JetBrains Mono"';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('4', cx, cy - 8);
+    ctx.fillText('10', cx, cy - 8);
     ctx.font = '400 12px Inter';
     ctx.fillStyle = '#94a3b8';
     ctx.fillText('CVEs', cx, cy + 14);
@@ -194,9 +194,9 @@ function animateBars() {
 // ---- 指标数字动画 ----
 function animateMetrics() {
     const targets = {
-        'total-cves': 4,
-        'affected-count': 3,
-        'not-affected-count': 1,
+        'total-cves': 10,
+        'affected-count': 8,
+        'not-affected-count': 2,
     };
 
     Object.entries(targets).forEach(([id, target]) => {
@@ -248,9 +248,33 @@ document.querySelectorAll('.section').forEach(s => {
     observer.observe(s, { attributes: true, attributeFilter: ['class'] });
 });
 
+// ---- 从 API 加载数据 (通过 api_server.py 提供) ----
+async function loadFromAPI() {
+    try {
+        const resp = await fetch('/api/results');
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.ours) {
+                const results = data.ours.results;
+                const total = Object.keys(results).length;
+                const affected = Object.values(results).filter(r => r.status === 'affected').length;
+                const notAffected = total - affected;
+                document.getElementById('total-cves').textContent = total;
+                document.getElementById('affected-count').textContent = affected;
+                document.getElementById('not-affected-count').textContent = notAffected;
+                document.getElementById('accuracy-value').textContent = Math.round(data.ours.accuracy * 100) + '%';
+                console.log('✅ API 数据加载成功:', total, 'CVEs');
+            }
+        }
+    } catch (e) {
+        console.log('ℹ️ API 不可用，使用默认数据 (启动 api_server.py 可接入实时数据)');
+    }
+}
+
 // ---- 初始化 ----
 document.addEventListener('DOMContentLoaded', () => {
     drawRiskChart();
     renderCVEDetail('CVE-2021-44228');
     animateMetrics();
+    loadFromAPI();
 });

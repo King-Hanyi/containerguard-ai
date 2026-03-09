@@ -22,21 +22,26 @@ from vuln_analysis.agents.state import CodeSearchResult, MultiAgentState
 
 logger = logging.getLogger(__name__)
 
-# CVE → 漏洞函数/关键词映射表（可扩展）
+# CVE → 漏洞函数/关键词映射表（覆盖 5 种语言生态，17 个 CVE）
 CVE_SEARCH_PATTERNS = {
     # Python 系列
     "CVE-2023-36632": ["email.utils.parseaddr", "parseaddr"],
     "CVE-2023-24329": ["urllib.parse", "urlparse"],
     "CVE-2022-45061": ["idna", "decode"],
+    "CVE-2023-32681": ["requests", "Proxy-Authorization", "rebuild_proxies"],
     # Java 系列
     "CVE-2021-44228": ["org.apache.logging.log4j", "JndiLookup", "log4j-core"],
     "CVE-2021-45046": ["org.apache.logging.log4j", "JndiLookup"],
     "CVE-2022-22965": ["spring-webmvc", "ClassPathResource", "spring-beans"],
     "CVE-2022-22947": ["spring-cloud-gateway", "RouteDefinitionLocator"],
+    "CVE-2017-5638": ["struts2-core", "JakartaMultiPartRequest", "Content-Type"],
+    "CVE-2022-42889": ["commons-text", "StringSubstitutor", "StringLookupFactory"],
     # C/C++ 系列
     "CVE-2014-0160": ["SSL_read", "dtls1_process_heartbeat", "tls1_process_heartbeat"],
     "CVE-2021-3449": ["ssl3_read_bytes", "SSL_do_handshake"],
     "CVE-2024-3094": ["xz", "liblzma"],
+    # Go 系列
+    "CVE-2023-44487": ["net/http2", "RSTStreamFrame", "golang.org/x/net"],
     # JavaScript / Node.js
     "CVE-2021-44906": ["minimist", "prototype pollution"],
     "CVE-2022-0235": ["node-fetch", "authorization header"],

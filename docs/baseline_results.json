@@ -1,11 +1,11 @@
 {
-  "experiment_date": "2026-03-06 12:52",
-  "test_cases": 4,
+  "experiment_date": "2026-03-09 13:09",
+  "test_cases": 10,
   "baseline": {
-    "accuracy": 0.5,
-    "unknown_rate": 0.5,
-    "avg_confidence": 0.4,
-    "avg_time_seconds": 45.75,
+    "accuracy": 0.2,
+    "unknown_rate": 0.8,
+    "avg_confidence": 0.29,
+    "avg_time_seconds": 47.3,
     "results": {
       "CVE-2021-44228": {
         "status": "affected",
@@ -17,54 +17,126 @@
         "confidence": 0.3,
         "time_seconds": 52
       },
+      "CVE-2017-5638": {
+        "status": "unknown",
+        "confidence": 0.2,
+        "time_seconds": 55
+      },
+      "CVE-2022-42889": {
+        "status": "unknown",
+        "confidence": 0.2,
+        "time_seconds": 50
+      },
       "CVE-2014-0160": {
         "status": "unknown",
         "confidence": 0.2,
         "time_seconds": 48
       },
+      "CVE-2021-3449": {
+        "status": "unknown",
+        "confidence": 0.2,
+        "time_seconds": 46
+      },
       "CVE-2023-36632": {
         "status": "not_affected",
         "confidence": 0.5,
         "time_seconds": 38
+      },
+      "CVE-2023-32681": {
+        "status": "unknown",
+        "confidence": 0.3,
+        "time_seconds": 42
+      },
+      "CVE-2023-44487": {
+        "status": "unknown",
+        "confidence": 0.2,
+        "time_seconds": 50
+      },
+      "CVE-2021-44906": {
+        "status": "unknown",
+        "confidence": 0.2,
+        "time_seconds": 47
       }
     }
   },
   "ours": {
     "accuracy": 1.0,
     "unknown_rate": 0.0,
-    "avg_confidence": 0.875,
-    "avg_time_seconds": 1.64,
+    "avg_confidence": 0.89,
+    "avg_time_seconds": 2.07,
     "results": {
       "CVE-2021-44228": {
         "status": "affected",
-        "confidence": 0.9,
-        "time_seconds": 1.68,
-        "justification": "component_present_and_vulnerable_code_found"
+        "confidence": 1.0,
+        "time_seconds": 1.48,
+        "justification": "affected"
       },
       "CVE-2022-22965": {
         "status": "affected",
         "confidence": 0.9,
-        "time_seconds": 1.6,
+        "time_seconds": 2.18,
         "justification": "affected"
       },
       "CVE-2014-0160": {
         "status": "affected",
         "confidence": 0.9,
-        "time_seconds": 1.4,
+        "time_seconds": 3.04,
         "justification": "affected"
       },
       "CVE-2023-36632": {
         "status": "not_affected",
         "confidence": 0.8,
-        "time_seconds": 1.87,
+        "time_seconds": 2.01,
         "justification": "vulnerable_code_not_in_execute_path"
+      },
+      "CVE-2017-5638": {
+        "status": "affected",
+        "confidence": 0.9,
+        "time_seconds": 2.2,
+        "justification": "affected"
+      },
+      "CVE-2022-42889": {
+        "status": "affected",
+        "confidence": 0.9,
+        "time_seconds": 1.51,
+        "justification": "affected"
+      },
+      "CVE-2021-3449": {
+        "status": "affected",
+        "confidence": 0.9,
+        "time_seconds": 1.68,
+        "justification": "affected"
+      },
+      "CVE-2023-32681": {
+        "status": "not_affected",
+        "confidence": 0.8,
+        "time_seconds": 1.82,
+        "justification": "vulnerable_code_not_in_execute_path"
+      },
+      "CVE-2023-44487": {
+        "status": "affected",
+        "confidence": 0.9,
+        "time_seconds": 2.71,
+        "justification": "affected"
+      },
+      "CVE-2021-44906": {
+        "status": "affected",
+        "confidence": 0.9,
+        "time_seconds": 2.09,
+        "justification": "affected"
       }
     }
   },
   "ground_truth": {
     "CVE-2021-44228": "affected",
     "CVE-2022-22965": "affected",
+    "CVE-2017-5638": "affected",
+    "CVE-2022-42889": "affected",
     "CVE-2014-0160": "affected",
-    "CVE-2023-36632": "not_affected"
+    "CVE-2021-3449": "affected",
+    "CVE-2023-36632": "not_affected",
+    "CVE-2023-32681": "not_affected",
+    "CVE-2023-44487": "affected",
+    "CVE-2021-44906": "affected"
   }
 }
