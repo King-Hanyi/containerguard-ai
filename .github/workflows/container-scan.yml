@@ -1,0 +1,73 @@
+# ContainerGuard AI — 容器漏洞扫描 & PR 报告
+#
+# 触发条件：
+#   - 向 main 分支提交的 Pull Request（opened / synchronize / reopened）
+#
+# 工作流步骤：
+#   1. 检出代码 & 配置 Python 环境
+#   2. 运行基线漏洞扫描，将结果写入 docs/baseline_results.json
+#   3. [步骤 A] 调用 generate_report.py → 生成 pr_report.md
+#   4. [步骤 B] 使用 peter-evans/create-or-update-comment@v4 将报告内容发布到 PR
+
+name: Container Vulnerability Scan & PR Report
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [ opened, synchronize, reopened ]
+
+permissions:
+  contents: read
+  pull-requests: write   # 允许向 PR 写入 Comment
+
+jobs:
+  container-scan:
+    name: Scan & Report
+    runs-on: ubuntu-latest
+
+    steps:
+      # ──────────────────────────────────────────────
+      # 1. 检出仓库
+      # ──────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ──────────────────────────────────────────────
+      # 2. 安装 uv 并配置 Python 3.12
+      # ──────────────────────────────────────────────
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install project dependencies
+        run: uv sync
+
+      # ──────────────────────────────────────────────
+      # 3. 运行漏洞基线扫描，产出 docs/baseline_results.json
+      # ──────────────────────────────────────────────
+      - name: Run container vulnerability scan
+        run: uv run python scripts/run_baseline.py
+
+      # ──────────────────────────────────────────────
+      # 步骤 A：调用 generate_markdown_report() 生成报告文件
+      # ──────────────────────────────────────────────
+      - name: Generate Markdown vulnerability report
+        run: |
+          uv run python scripts/generate_report.py \
+            --input  docs/baseline_results.json \
+            --output pr_report.md \
+            --target "${{ github.event.pull_request.head.repo.full_name }}@${{ github.event.pull_request.head.sha }}"
+
+      # ──────────────────────────────────────────────
+      # 步骤 B：将 pr_report.md 内容作为 Comment 发布到 PR
+      # ──────────────────────────────────────────────
+      - name: Post vulnerability report comment to PR
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-path: pr_report.md
+          edit-mode: replace   # 如已有 comment 则覆盖，避免重复刷屏
