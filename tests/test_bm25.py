@@ -13,8 +13,8 @@
 # limitations under the License.
 
 import pytest
-from src.vuln_analysis.knowledge.bm25_retriever import BM25Retriever
-from src.vuln_analysis.knowledge.hybrid_retriever import HybridRetriever, KnowledgeGraph
+from vuln_analysis.knowledge.bm25_retriever import BM25Retriever
+from vuln_analysis.knowledge.hybrid_retriever import HybridRetriever, KnowledgeGraph
 
 class MockKnowledgeGraph(KnowledgeGraph):
     def query_attack_chain(self, cve_id: str) -> list[str]:

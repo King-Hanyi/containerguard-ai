@@ -58,6 +58,8 @@ class APIHandler(SimpleHTTPRequestHandler):
 
         if path == "/api/results":
             self._send_json(self._get_results())
+        elif path == "/api/enriched-results":
+            self._send_json(self._get_enriched_results())
         elif path == "/api/status":
             self._send_json(self._get_status())
         elif path == "/api/policy":
@@ -71,6 +73,110 @@ class APIHandler(SimpleHTTPRequestHandler):
         else:
             # 静态文件
             super().do_GET()
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/scan":
+            self._handle_scan()
+        else:
+            self.send_error(404)
+
+    def _handle_scan(self):
+        """触发 baseline 扫描（异步子进程执行）。"""
+        import threading
+
+        def run_scan():
+            subprocess.run(
+                [sys.executable, str(PROJECT_ROOT / "scripts" / "run_baseline.py")],
+                cwd=str(PROJECT_ROOT),
+                capture_output=True, text=True, timeout=300,
+            )
+
+        thread = threading.Thread(target=run_scan, daemon=True)
+        thread.start()
+        self._send_json({"status": "started", "message": "扫描已启动，请稍后刷新结果"})
+
+    def _get_enriched_results(self):
+        """返回增强后的结果数据（含 intel 情报 + OPA 策略决策），供前端完整展示。"""
+        try:
+            raw = self._get_results()
+            if "error" in raw:
+                return raw
+
+            from vuln_analysis.agents.intel_agent import BUILTIN_INTEL
+            from vuln_analysis.report_generator import CVE_INTEL
+            from vuln_analysis.policy import OPAEngine
+            from vuln_analysis.agents.state import VEXJudgment, IntelResult
+
+            ours = raw.get("ours", {}).get("results", {})
+            baseline = raw.get("baseline", {}).get("results", {})
+
+            # OPA 策略评估
+            engine = OPAEngine()
+            vex_judgments = {}
+            intel_results = {}
+            for cve_id, r in ours.items():
+                vex_judgments[cve_id] = VEXJudgment(
+                    cve_id=cve_id, status=r["status"],
+                    confidence=r["confidence"], justification=r.get("justification", ""),
+                )
+                entry = BUILTIN_INTEL.get(cve_id, {})
+                intel_results[cve_id] = IntelResult(
+                    cve_id=cve_id, severity=entry.get("severity", "unknown"),
+                )
+            decisions = engine.evaluate(vex_judgments, intel_results)
+            policy_summary = engine.summary(decisions)
+            policy_map = {d.cve_id: {"action": d.action, "rule": d.matched_rule, "reason": d.reason} for d in decisions}
+
+            # 构建增强数据
+            enriched = {}
+            for cve_id, r in ours.items():
+                intel_entry = BUILTIN_INTEL.get(cve_id, {})
+                cve_intel = CVE_INTEL.get(cve_id, {})
+                pkgs = intel_entry.get("affected_packages", [])
+                pkg = pkgs[0] if pkgs else {}
+
+                enriched[cve_id] = {
+                    "severity": intel_entry.get("severity", "unknown"),
+                    "description": intel_entry.get("description", cve_intel.get("desc", "")),
+                    "vex": {
+                        "status": r["status"],
+                        "confidence": r["confidence"],
+                        "justification": cve_intel.get("justification", r.get("justification", "")),
+                    },
+                    "intel": {
+                        "severity": intel_entry.get("severity", "unknown"),
+                        "source": "BUILTIN_INTEL + BRON",
+                    },
+                    "config": {
+                        "package": pkg.get("name", "N/A"),
+                        "constraint": pkg.get("versions", "N/A"),
+                    },
+                    "opa": policy_map.get(cve_id, {"action": "pass", "rule": "default"}),
+                    "time_seconds": r.get("time_seconds", 0),
+                    # Baseline 对比
+                    "baseline": baseline.get(cve_id, {}),
+                }
+
+            return {
+                "enriched": enriched,
+                "summary": {
+                    "total": len(enriched),
+                    "affected": sum(1 for e in enriched.values() if e["vex"]["status"] == "affected"),
+                    "not_affected": sum(1 for e in enriched.values() if e["vex"]["status"] != "affected"),
+                    "avg_confidence": raw.get("ours", {}).get("avg_confidence", 0),
+                    "avg_time": raw.get("ours", {}).get("avg_time_seconds", 0),
+                    "accuracy": raw.get("ours", {}).get("accuracy", 0),
+                },
+                "policy": policy_summary,
+                "baseline_summary": {
+                    "accuracy": raw.get("baseline", {}).get("accuracy", 0),
+                    "avg_confidence": raw.get("baseline", {}).get("avg_confidence", 0),
+                    "avg_time": raw.get("baseline", {}).get("avg_time_seconds", 0),
+                },
+            }
+        except Exception as e:
+            return {"error": str(e)}
 
     def _send_json(self, data):
         body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")

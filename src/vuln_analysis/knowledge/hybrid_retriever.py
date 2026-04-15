@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from src.vuln_analysis.knowledge.bm25_retriever import BM25Retriever
+from vuln_analysis.knowledge.bm25_retriever import BM25Retriever
 from typing import Any
 
 class KnowledgeGraph:

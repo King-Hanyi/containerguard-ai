@@ -93,7 +93,11 @@ class MultiAgentState(BaseModel):
     config_results: dict[str, ConfigResult] = Field(default_factory=dict, description="Config Agent 结果")
     vex_judgments: dict[str, VEXJudgment] = Field(default_factory=dict, description="VEX Agent 最终判定")
     
+    # OPA 策略引擎结果
+    policy_decisions: list[dict[str, typing.Any]] = Field(default_factory=list, description="OPA 策略决策列表")
+    policy_summary: dict[str, typing.Any] = Field(default_factory=dict, description="OPA 策略评估摘要")
+
     # 任务追踪
     tasks: list[AgentTask] = Field(default_factory=list, description="任务列表")
-    current_phase: str = Field(default="init", description="当前阶段: init → gather → judge → done")
+    current_phase: str = Field(default="init", description="当前阶段: init → gather → judge → policy → done")
     errors: list[str] = Field(default_factory=list, description="全局错误记录")

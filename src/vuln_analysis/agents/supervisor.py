@@ -23,6 +23,7 @@ from vuln_analysis.agents.intel_agent import intel_agent_node
 from vuln_analysis.agents.code_agent import code_agent_node
 from vuln_analysis.agents.config_agent import config_agent_node
 from vuln_analysis.agents.vex_agent import vex_agent_node
+from vuln_analysis.policy import OPAEngine
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,38 @@ async def summary_node(state: MultiAgentState) -> MultiAgentState:
     return state
 
 
+async def policy_node(state: MultiAgentState) -> MultiAgentState:
+    """
+    策略评估节点: 调用 OPA 策略引擎对 VEX 判定结果做安全门禁决策。
+    
+    将每个 CVE 的 VEX 判定 + Intel 情报传入 OPAEngine,
+    输出 block / warn / pass / manual_review 决策。
+    """
+    logger.info("🛡️ Supervisor: 启动 OPA 安全策略评估")
+    
+    engine = OPAEngine()
+    decisions = engine.evaluate(state.vex_judgments, state.intel_results)
+    summary = engine.summary(decisions)
+    report = engine.print_report(decisions)
+    
+    # 将决策序列化存入 state
+    state.policy_decisions = [
+        {
+            "cve_id": d.cve_id,
+            "action": d.action,
+            "matched_rule": d.matched_rule,
+            "reason": d.reason,
+            "severity": d.severity,
+            "confidence": d.confidence,
+        }
+        for d in decisions
+    ]
+    state.policy_summary = summary
+    state.current_phase = "done"
+    
+    return state
+
+
 # ============================================================
 # 构建 LangGraph 状态机
 # ============================================================
@@ -140,9 +173,10 @@ def build_supervisor_graph() -> StateGraph:
     构建 Supervisor 多 Agent 状态机。
     
     图结构:
-        START → init → gather → judge → summary → END
+        START → init → gather → judge → summary → policy → END
     
-    其中 gather 节点内部并行调度 Intel/Code/Config 三个 Agent。
+    其中 gather 节点内部并行调度 Intel/Code/Config 三个 Agent,
+    policy 节点使用 OPA 策略引擎对判定结果做安全门禁评估。
     """
     graph_builder = StateGraph(MultiAgentState)
     
@@ -151,13 +185,15 @@ def build_supervisor_graph() -> StateGraph:
     graph_builder.add_node("gather", gather_node)
     graph_builder.add_node("judge", judge_node)
     graph_builder.add_node("summary", summary_node)
+    graph_builder.add_node("policy", policy_node)
     
     # 定义边 (线性流程，并行在 gather 内部实现)
     graph_builder.add_edge(START, "init")
     graph_builder.add_edge("init", "gather")
     graph_builder.add_edge("gather", "judge")
     graph_builder.add_edge("judge", "summary")
-    graph_builder.add_edge("summary", END)
+    graph_builder.add_edge("summary", "policy")
+    graph_builder.add_edge("policy", END)
     
     return graph_builder
 

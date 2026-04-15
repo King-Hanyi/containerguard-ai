@@ -175,8 +175,9 @@ class TestSupervisor:
 
     def test_graph_has_nodes(self):
         graph = build_supervisor_graph()
-        # StateGraph 应该有 init, gather, judge, summary 节点
+        # StateGraph 应该有 init, gather, judge, summary, policy 节点
         assert "init" in graph.nodes
         assert "gather" in graph.nodes
         assert "judge" in graph.nodes
         assert "summary" in graph.nodes
+        assert "policy" in graph.nodes
