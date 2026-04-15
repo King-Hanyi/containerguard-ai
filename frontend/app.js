@@ -2,8 +2,10 @@
    ContainerGuard AI — 产品级扫描平台交互逻辑
    ============================================================ */
 
-// ---- CVE 扫描数据 (模拟真实扫描结果) ----
-const SCAN_DATA = {
+let API_MODE = false; // 是否成功从后端加载了真实数据
+
+// ---- CVE 扫描数据 (默认演示数据，API 成功后会被覆盖) ----
+let SCAN_DATA = {
     "CVE-2021-44228": {
         name: "Log4Shell", severity: "critical",
         description: "Apache Log4j2 JNDI injection vulnerability allows RCE via JndiLookup. CVSS 10.0.",
@@ -198,6 +200,9 @@ async function startScan() {
     preview.classList.add('hidden');
     log.innerHTML = '';
 
+    // 尝试触发真实扫描
+    try { fetch('/api/scan', { method: 'POST' }).catch(() => { }); } catch (e) { }
+
     for (const step of SCAN_STEPS) {
         await new Promise(r => setTimeout(r, step.delay));
         fill.style.width = step.pct + '%';
@@ -209,6 +214,9 @@ async function startScan() {
         log.scrollTop = log.scrollHeight;
     }
 
+    // 扫描动画结束后尝试加载真实数据
+    await loadFromAPI();
+
     await new Promise(r => setTimeout(r, 500));
     preview.classList.remove('hidden');
     btn.classList.remove('scanning');
@@ -216,6 +224,7 @@ async function startScan() {
 
     // 渲染报告表格
     renderCVETable();
+    updatePreviewCards();
 }
 
 // ---- 报告表格 ----
@@ -335,7 +344,109 @@ document.querySelectorAll('.section').forEach(s => {
     observer.observe(s, { attributes: true, attributeFilter: ['class'] });
 });
 
+// ---- 从后端 API 加载真实数据 ----
+async function loadFromAPI() {
+    try {
+        const resp = await fetch('/api/enriched-results');
+        if (!resp.ok) return false;
+        const data = await resp.json();
+        if (data.error || !data.enriched) return false;
+
+        // 将 API 数据转换为 SCAN_DATA 格式
+        const newData = {};
+        for (const [cveId, e] of Object.entries(data.enriched)) {
+            newData[cveId] = {
+                name: cveId,
+                severity: e.severity || 'unknown',
+                description: e.description || '',
+                intel: {
+                    severity: e.intel?.severity || e.severity || 'unknown',
+                    source: e.intel?.source || 'BUILTIN_INTEL',
+                    cvss: 0,
+                    attack_chain: ''
+                },
+                code: { found: e.vex?.status === 'affected', query: '', files: [], evidence: '' },
+                config: {
+                    found: e.config?.package !== 'N/A',
+                    package: e.config?.package || 'N/A',
+                    version: '',
+                    constraint: e.config?.constraint || 'N/A',
+                    vulnerable: e.vex?.status === 'affected'
+                },
+                vex: {
+                    status: e.vex?.status || 'unknown',
+                    confidence: e.vex?.confidence || 0,
+                    justification: e.vex?.justification || '',
+                    reasoning: e.vex?.justification || ''
+                },
+                checklist: {
+                    component: e.config?.package !== 'N/A',
+                    version: e.vex?.status === 'affected',
+                    code: e.vex?.status === 'affected'
+                },
+                opa: {
+                    action: e.opa?.action || 'pass',
+                    rule: e.opa?.rule || 'default'
+                }
+            };
+        }
+
+        SCAN_DATA = newData;
+        API_MODE = true;
+
+        // 更新统计
+        if (data.summary) {
+            const s = data.summary;
+            document.getElementById('p-total').textContent = s.total;
+            document.getElementById('p-affected').textContent = s.affected;
+            document.getElementById('p-safe').textContent = s.not_affected;
+            document.getElementById('r-total').textContent = s.total;
+        }
+        if (data.policy) {
+            const p = data.policy;
+            const gateIcon = document.getElementById('p-gate-icon');
+            const gateVal = document.getElementById('p-gate');
+            const banner = document.getElementById('gate-banner');
+            const bannerTitle = banner?.querySelector('.gate-title');
+            const bannerDetail = banner?.querySelector('.gate-detail');
+
+            if (p.gate_result === 'PASSED') {
+                if (gateIcon) gateIcon.textContent = '✅';
+                if (gateVal) gateVal.textContent = 'PASSED';
+                if (banner) { banner.className = 'gate-banner passed'; }
+                if (bannerTitle) bannerTitle.innerHTML = '部署决策: <strong>PASSED</strong>';
+                if (bannerDetail) bannerDetail.textContent = `所有漏洞已通过 OPA 策略检查`;
+            } else {
+                if (gateIcon) gateIcon.textContent = '🚫';
+                if (gateVal) gateVal.textContent = 'BLOCKED';
+                if (banner) { banner.className = 'gate-banner blocked'; }
+                if (bannerTitle) bannerTitle.innerHTML = '部署决策: <strong>BLOCKED</strong>';
+                if (bannerDetail) bannerDetail.textContent = `发现 ${p.blocked || 0} 个阻断漏洞，OPA 策略引擎已阻断部署`;
+            }
+        }
+
+        console.log(`✅ 已从 API 加载 ${Object.keys(newData).length} 个 CVE 的真实数据`);
+        return true;
+    } catch (e) {
+        console.log('ℹ️ API 不可用，使用演示数据:', e.message);
+        return false;
+    }
+}
+
+function updatePreviewCards() {
+    const entries = Object.values(SCAN_DATA);
+    const total = entries.length;
+    const affected = entries.filter(e => e.vex.status === 'affected').length;
+    const safe = total - affected;
+    document.getElementById('p-total').textContent = total;
+    document.getElementById('p-affected').textContent = affected;
+    document.getElementById('p-safe').textContent = safe;
+}
+
 // ---- 初始化 ----
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // 先尝试从 API 加载真实数据
+    await loadFromAPI();
     renderCVETable();
+    updatePreviewCards();
 });

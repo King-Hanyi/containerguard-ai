@@ -96,7 +96,7 @@ OPA 策略引擎（安全门禁: block / warn / pass）
 | Affected 判定 | 8 |
 | Not Affected 判定 | 2 |
 | 平均置信度 | 89% |
-| 测试通过 | 43/43 |
+| 测试通过 | 61/61 |
 
 > 判定基于 LLM 推理 + Checklist 验证，**非人工标注的 ground truth**。完整结果见 `docs/baseline_results.json`。
 
@@ -116,10 +116,12 @@ src/vuln_analysis/
 ├── skills/                  # Skills 插件化框架
 │   ├── base.py / registry.py
 │   ├── intel.py / config.py / remote_code.py
-├── knowledge/               # BRON 知识图谱
-│   ├── bron_loader.py       # 多格式加载器 (357行)
-│   └── knowledge_graph.py   # 攻击链查询 (232行)
-├── policy.py                # OPA 策略引擎
+├── knowledge/               # 知识增强检索
+│   ├── bron_loader.py       # BRON 多格式加载器 (357行)
+│   ├── knowledge_graph.py   # 攻击链查询 (232行)
+│   ├── bm25_retriever.py    # BM25 稀疏检索
+│   └── hybrid_retriever.py  # RRF 混合检索融合
+├── policy/                  # OPA 策略引擎 (238行)
 ├── report_generator.py      # 报告生成 (MD/HTML/DOCX)
 └── data/input_messages/     # 测试输入 (4 文件)
 
@@ -127,12 +129,13 @@ frontend/                    # 产品级 Web 前端
 ├── index.html / style.css / app.js
 
 scripts/
-├── api_server.py            # API 服务器 (含报告导出)
+├── api_server.py            # API 服务器 (含报告导出 + 真实扫描触发)
 ├── demo_agents.py           # 多 Agent 演示
-└── run_baseline.py          # Baseline 对比实验
+├── run_baseline.py          # Baseline 对比实验
+└── generate_report.py       # CI/CD 扫描报告生成
 
-tests/                       # 43 项测试
-├── test_skills.py / test_agents.py / test_bron.py / ...
+tests/                       # 61 项测试
+├── test_agents.py / test_policy.py / test_bm25.py / test_bron.py / ...
 ```
 
 ---
@@ -159,7 +162,7 @@ uv sync
 cp .env.template .env
 # 编辑 .env，填入 NVIDIA_API_KEY
 
-# 4. 运行测试 (43/43 通过)
+# 4. 运行测试 (61/61 通过)
 uv run python -m pytest tests/ -v
 
 # 5. 启动产品级前端
